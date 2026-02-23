@@ -5,6 +5,8 @@ from libs.db.base import Base
 from libs.db.models.url.current import UrlStateCurrent
 from libs.db.models.url.history import UrlStateHistory
 from libs.db.models.url.counter import UrlEventCounter
+from libs.db.models.content.current import ContentFeatureCurrent
+from libs.db.models.content.history import ContentFeatureHistory
 
 
 @lru_cache(maxsize=None)
@@ -59,3 +61,35 @@ def url_event_counter_table(shard_id: int) -> Type[UrlEventCounter]:
             "__tablename__": f"url_event_counter_{shard_id:03d}",
         },
     )
+
+
+
+@lru_cache(maxsize=None)
+def content_feature_current_table(shard_id: int) -> Type[ContentFeatureCurrent]:
+    """
+    Return ORM class bound to table `content_feature_current_XXX`.
+    """
+    if shard_id < 0:
+        raise ValueError("invalid shard_id")
+
+    return type(
+        f"ContentFeatureCurrent_{shard_id:03d}",
+        (ContentFeatureCurrent,),
+        {"__tablename__": f"content_feature_current_{shard_id:03d}"},
+    )
+
+
+@lru_cache(maxsize=None)
+def content_feature_history_table(shard_id: int) -> Type[ContentFeatureHistory]:
+    """
+    Return ORM class bound to table `content_feature_history_XXX`.
+    """
+    if shard_id < 0:
+        raise ValueError("invalid shard_id")
+
+    return type(
+        f"ContentFeatureHistory_{shard_id:03d}",
+        (ContentFeatureHistory,),
+        {"__tablename__": f"content_feature_history_{shard_id:03d}"},
+    )
+
