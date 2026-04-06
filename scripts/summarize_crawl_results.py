@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+from typing import Iterable
 
 
 DEFAULT_ROOT = "data/ipc/crawl_result"
+DEFAULT_BUCKET_MINUTES = 10
 
 
 def parse_ts(raw: str) -> datetime:
@@ -45,6 +47,12 @@ def parse_args() -> argparse.Namespace:
         default="run",
         help="Label shown in the summary output.",
     )
+    parser.add_argument(
+        "--bucket-minutes",
+        type=int,
+        default=DEFAULT_BUCKET_MINUTES,
+        help="Folder bucket size in minutes. Default: 10.",
+    )
     return parser.parse_args()
 
 
@@ -73,6 +81,35 @@ class Summary:
     unique_domains: int = 0
 
 
+def floor_to_bucket(ts: datetime, bucket_minutes: int) -> datetime:
+    ts = ts.astimezone(timezone.utc)
+    floored_minute = (ts.minute // bucket_minutes) * bucket_minutes
+    return ts.replace(minute=floored_minute, second=0, microsecond=0)
+
+
+def iter_bucket_starts(
+    since: datetime, until: datetime, bucket_minutes: int
+) -> Iterable[datetime]:
+    current = floor_to_bucket(since, bucket_minutes)
+    while current < until:
+        yield current
+        current += timedelta(minutes=bucket_minutes)
+
+
+def candidate_paths(
+    root: Path, since: datetime, until: datetime, bucket_minutes: int
+) -> list[Path]:
+    wanted: set[Path] = set()
+    for bucket_start in iter_bucket_starts(since, until, bucket_minutes):
+        date_dir = bucket_start.strftime("%Y%m%d")
+        time_dir = bucket_start.strftime("%H%M")
+        for crawler_dir in root.glob("crawler_*"):
+            candidate_dir = crawler_dir / date_dir / time_dir
+            if candidate_dir.exists():
+                wanted.update(candidate_dir.glob("*.jsonl"))
+    return sorted(wanted)
+
+
 def main() -> None:
     args = parse_args()
     since, until = resolve_window(args)
@@ -80,6 +117,8 @@ def main() -> None:
 
     if not root.exists():
         raise SystemExit(f"crawl_result root not found: {root}")
+    if args.bucket_minutes <= 0:
+        raise SystemExit("--bucket-minutes must be > 0")
 
     fail_reasons: Counter[str] = Counter()
     urls: set[str] = set()
@@ -90,7 +129,23 @@ def main() -> None:
     fail = 0
     http_429 = 0
 
-    for path in root.glob("crawler_*/*/*/*.jsonl"):
+    paths = candidate_paths(root, since, until, args.bucket_minutes)
+    if not paths:
+        print(f"label: {args.label}")
+        print(f"window_utc: {since.isoformat()} -> {until.isoformat()}")
+        print("files_scanned: 0")
+        print("total_requests: 0")
+        print("ok: 0")
+        print("fail: 0")
+        print("http_429: 0")
+        print("unique_urls: 0")
+        print("unique_domains: 0")
+        print("req_per_hour: 0.00")
+        print("ok_per_hour: 0.00")
+        print("429_per_hour: 0.00")
+        return
+
+    for path in paths:
         with path.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -138,6 +193,7 @@ def main() -> None:
 
     print(f"label: {args.label}")
     print(f"window_utc: {since.isoformat()} -> {until.isoformat()}")
+    print(f"files_scanned: {len(paths)}")
     print(f"total_requests: {summary.total}")
     print(f"ok: {summary.ok}")
     print(f"fail: {summary.fail}")
