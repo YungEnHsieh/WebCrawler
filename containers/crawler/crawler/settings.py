@@ -1,4 +1,4 @@
-import json
+import os
 
 BOT_NAME = "crawler"
 LOG_LEVEL = "WARNING"
@@ -10,15 +10,51 @@ ROBOTSTXT_OBEY = True
 
 DUPEFILTER_CLASS = "scrapy.dupefilters.BaseDupeFilter" # Disable dupefilter
 
-with open("domain_qps.json") as f:
-    _DOMAIN_QPS = json.load(f)
-_DEFAULT_QPS = _DOMAIN_QPS.pop("_default", {})
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
-CONCURRENT_REQUESTS = 128
-CONCURRENT_REQUESTS_PER_DOMAIN = _DEFAULT_QPS.get("concurrency", 4)
-DOWNLOAD_DELAY = _DEFAULT_QPS.get("delay", 1.0)
-DOWNLOAD_SLOTS = _DOMAIN_QPS
-AUTOTHROTTLE_ENABLED = False
+
+CONCURRENT_REQUESTS = int(os.getenv("CRAWLER_CONCURRENT_REQUESTS", "128"))
+USE_AUTOTHROTTLE = _env_bool("CRAWLER_USE_AUTOTHROTTLE", True)
+
+if USE_AUTOTHROTTLE:
+    CONCURRENT_REQUESTS_PER_DOMAIN = int(
+        os.getenv("CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN", "8")
+    )
+    DOWNLOAD_DELAY = float(os.getenv("CRAWLER_DOWNLOAD_DELAY", "0.25"))
+
+    AUTOTHROTTLE_ENABLED = True
+    AUTOTHROTTLE_START_DELAY = float(
+        os.getenv("CRAWLER_AUTOTHROTTLE_START_DELAY", "1.0")
+    )
+    AUTOTHROTTLE_MAX_DELAY = float(
+        os.getenv("CRAWLER_AUTOTHROTTLE_MAX_DELAY", "15.0")
+    )
+    AUTOTHROTTLE_TARGET_CONCURRENCY = float(
+        os.getenv("CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY", "2.0")
+    )
+    AUTOTHROTTLE_DEBUG = _env_bool("CRAWLER_AUTOTHROTTLE_DEBUG", False)
+else:
+    import json
+
+    with open("domain_qps.json") as f:
+        _DOMAIN_QPS = json.load(f)
+    _DEFAULT_QPS = _DOMAIN_QPS.pop("_default", {})
+
+    CONCURRENT_REQUESTS_PER_DOMAIN = int(
+        os.getenv(
+            "CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN",
+            str(_DEFAULT_QPS.get("concurrency", 4)),
+        )
+    )
+    DOWNLOAD_DELAY = float(
+        os.getenv("CRAWLER_DOWNLOAD_DELAY", str(_DEFAULT_QPS.get("delay", 1.0)))
+    )
+    DOWNLOAD_SLOTS = _DOMAIN_QPS
+    AUTOTHROTTLE_ENABLED = False
 
 DNS_TIMEOUT = 15
 DOWNLOAD_TIMEOUT = 15
@@ -46,4 +82,3 @@ ITEM_PIPELINES = {
 URL_QUEUE_TEMPLATE = "/data/ipc/url_queue/crawler_{id:02d}"
 RESULT_DIR_TEMPLATE = "/data/ipc/crawl_result/crawler_{id:02d}"
 INTERVAL_MINUTES = 10
-

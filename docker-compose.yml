@@ -12,7 +12,7 @@ services:
       - POSTGRES_PASSWORD=crawler
       - POSTGRES_DB=crawlerdb
     volumes:
-      - /data/postgres:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/app
-      - /data/ipc:/data/ipc
+      - ./data/ipc:/data/ipc
     logging:
       driver: json-file
       options:
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./:/app
-      - /data/ipc:/data/ipc
+      - ./data/ipc:/data/ipc
     logging:
       driver: json-file
       options:
@@ -64,17 +64,25 @@ services:
       dockerfile: containers/crawler/Dockerfile
     container_name: crawler
     init: true
+    environment:
+      CRAWLER_USE_AUTOTHROTTLE: ${CRAWLER_USE_AUTOTHROTTLE:-true}
+      CRAWLER_CONCURRENT_REQUESTS: ${CRAWLER_CONCURRENT_REQUESTS:-128}
+      CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN: ${CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN:-8}
+      CRAWLER_DOWNLOAD_DELAY: ${CRAWLER_DOWNLOAD_DELAY:-0.25}
+      CRAWLER_AUTOTHROTTLE_START_DELAY: ${CRAWLER_AUTOTHROTTLE_START_DELAY:-1.0}
+      CRAWLER_AUTOTHROTTLE_MAX_DELAY: ${CRAWLER_AUTOTHROTTLE_MAX_DELAY:-15.0}
+      CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY: ${CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY:-2.0}
+      CRAWLER_AUTOTHROTTLE_DEBUG: ${CRAWLER_AUTOTHROTTLE_DEBUG:-false}
     dns:
       - 8.8.8.8
       - 1.1.1.1
     restart: unless-stopped
     volumes:
       - ./:/app
-      - /data/ipc:/data/ipc
+      - ./data/ipc:/data/ipc
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "10"
-
 

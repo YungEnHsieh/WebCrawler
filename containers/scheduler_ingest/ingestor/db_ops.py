@@ -176,9 +176,14 @@ class IngestDB:
             try:
                 inserted_url = sess.execute(
                     text(f"""
-                    INSERT INTO {tcur} (url, domain_id, domain_score)
-                    VALUES (:url, :domain_id, :domain_score)
-                    ON CONFLICT (url) DO NOTHING
+                    INSERT INTO {tcur} (url, domain_id, domain_score, should_crawl)
+                    VALUES (:url, :domain_id, :domain_score, TRUE)
+                    ON CONFLICT (url) DO UPDATE SET
+                      should_crawl = COALESCE({tcur}.should_crawl, TRUE),
+                      domain_score = GREATEST(
+                        COALESCE({tcur}.domain_score, 0.0),
+                        EXCLUDED.domain_score
+                      )
                     RETURNING url;
                     """),
                     {
@@ -208,5 +213,4 @@ class IngestDB:
             except Exception as e:
                 sess.rollback()
                 raise e
-
 

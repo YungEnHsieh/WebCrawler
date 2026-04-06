@@ -10,3 +10,9 @@ tmp/
 *.swp
 *.swo
 
+data/ipc/
+data/postgres/
+data/urls.txt
+
+data/postgres
+data/ipc/
