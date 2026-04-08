@@ -29,6 +29,7 @@ class HtmlSpider(scrapy.Spider):
         qtpl = crawler.settings["URL_QUEUE_TEMPLATE"]
         spider.queue = QueueConsumer(queue_dir=qtpl.format(id=spider.crawler_id))
         spider.link_extractor = LinkExtractor(canonicalize=True)
+        spider.exit_on_idle = bool(crawler.settings.getbool("EXIT_ON_IDLE", False))
 
         crawler.signals.connect(spider.on_idle, signal=signals.spider_idle)
         crawler.signals.connect(spider.req_scheduled, signal=signals.request_scheduled)
@@ -53,6 +54,13 @@ class HtmlSpider(scrapy.Spider):
         urls = self.queue.pop_batch()
         t = datetime.now()
         print(f"[crawler-{self.crawler_id:02d}] Get {len(urls)} new requests, time={t}", flush=True)
+
+        if not urls and self.exit_on_idle:
+            print(
+                f"[crawler-{self.crawler_id:02d}] Queue empty, closing spider",
+                flush=True,
+            )
+            return
 
         for u in urls:
             self.crawler.engine.crawl(
@@ -136,4 +144,3 @@ class HtmlSpider(scrapy.Spider):
     def req_end(self, response, request):
         t = datetime.now()
         print(f"[crawler-{self.crawler_id:02d}] Download ended: time={t}, url={request.url}, latency={t - request.meta.get("t_down_start", t)}", flush=True)
-

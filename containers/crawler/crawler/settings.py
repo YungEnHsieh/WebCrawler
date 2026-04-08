@@ -1,7 +1,7 @@
 import os
 
 BOT_NAME = "crawler"
-LOG_LEVEL = "WARNING"
+LOG_LEVEL = os.getenv("CRAWLER_LOG_LEVEL", "WARNING")
 
 SPIDER_MODULES = ["crawler.spiders"]
 NEWSPIDER_MODULE = "crawler.spiders"
@@ -79,6 +79,11 @@ ITEM_PIPELINES = {
     "crawler.pipelines.JsonPipeline": 500,
 }
 
-URL_QUEUE_TEMPLATE = "/data/ipc/url_queue/crawler_{id:02d}"
-RESULT_DIR_TEMPLATE = "/data/ipc/crawl_result/crawler_{id:02d}"
-INTERVAL_MINUTES = 10
+URL_QUEUE_TEMPLATE = os.getenv(
+    "CRAWLER_URL_QUEUE_TEMPLATE", "/data/ipc/url_queue/crawler_{id:02d}"
+)
+RESULT_DIR_TEMPLATE = os.getenv(
+    "CRAWLER_RESULT_DIR_TEMPLATE", "/data/ipc/crawl_result/crawler_{id:02d}"
+)
+INTERVAL_MINUTES = int(os.getenv("CRAWLER_INTERVAL_MINUTES", "10"))
+EXIT_ON_IDLE = _env_bool("CRAWLER_EXIT_ON_IDLE", False)
