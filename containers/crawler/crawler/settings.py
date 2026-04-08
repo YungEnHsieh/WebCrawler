@@ -73,6 +73,7 @@ COOKIES_ENABLED = False
 EXTENSIONS = {
     "scrapy.extensions.logstats.LogStats": 500,
     "scrapy.extensions.memusage.MemoryUsage": 500,
+    "crawler.extensions.DomainQpsLoggerExtension": 510,
 }
 
 ITEM_PIPELINES = {
@@ -87,3 +88,11 @@ RESULT_DIR_TEMPLATE = os.getenv(
 )
 INTERVAL_MINUTES = int(os.getenv("CRAWLER_INTERVAL_MINUTES", "10"))
 EXIT_ON_IDLE = _env_bool("CRAWLER_EXIT_ON_IDLE", False)
+METRICS_DIR_TEMPLATE = os.getenv(
+    "CRAWLER_METRICS_DIR_TEMPLATE", "/data/ipc/metrics/crawler_{id:02d}"
+)
+DOMAIN_QPS_LOG_ENABLED = _env_bool("CRAWLER_DOMAIN_QPS_LOG_ENABLED", False)
+DOMAIN_QPS_LOG_INTERVAL = float(os.getenv("CRAWLER_DOMAIN_QPS_LOG_INTERVAL", "1.0"))
+DOMAIN_QPS_WINDOW_SECONDS = float(
+    os.getenv("CRAWLER_DOMAIN_QPS_WINDOW_SECONDS", "5.0")
+)

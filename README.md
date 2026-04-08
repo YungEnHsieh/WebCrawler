@@ -139,6 +139,9 @@ Lightweight experiment parameters:
 - `CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY`: Target average concurrency AutoThrottle tries to maintain per remote server. Only meaningful for `make experiment-autothrottle`. Crawler default: `2.0`
 - `CRAWLER_AUTOTHROTTLE_DEBUG`: Set to `true` to print AutoThrottle adjustment logs. Only meaningful for `make experiment-autothrottle`. Crawler default: `false`
 - `CRAWLER_LOG_LEVEL`: Scrapy log level for the experiment run, for example `WARNING`, `INFO`, or `DEBUG`. Default: `WARNING`
+- `CRAWLER_DOMAIN_QPS_LOG_ENABLED`: Whether to write per-domain QPS time series during the run. Experiment default: `true`
+- `CRAWLER_DOMAIN_QPS_LOG_INTERVAL`: Sampling interval in seconds for the QPS time series. Smaller values give smoother charts but produce more samples. Experiment default: `1.0`
+- `CRAWLER_DOMAIN_QPS_WINDOW_SECONDS`: Rolling window size used to compute instantaneous QPS. For example, with `5.0`, each sample reports `completed_in_window / 5.0`. Experiment default: `5.0`
 
 Parameter selection guidance:
 
@@ -146,6 +149,30 @@ Parameter selection guidance:
 - Tune fixed-QPS runs mainly with `CRAWLER_DOWNLOAD_DELAY`.
 - Tune AutoThrottle runs mainly with `CRAWLER_AUTOTHROTTLE_START_DELAY`, `CRAWLER_AUTOTHROTTLE_MAX_DELAY`, and `CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY`.
 - Use a small `EXPERIMENT_LIMIT` first, for example `50` or `100`, to confirm the target sites are stable before increasing load.
+
+Per-domain QPS metrics:
+
+- Lightweight experiments now write a time-series file at `data/experiments/<label>/<mode>/metrics/crawler_<id>/domain_qps.jsonl`
+- Each line is one sampled domain snapshot in JSONL format
+- `sample_at`: Sample time in UTC ISO-8601
+- `crawler_id`: Crawler worker ID used by this run
+- `domain`: Registrable domain
+- `window_seconds`: Rolling window size used for QPS calculation
+- `interval_seconds`: Sampling interval used when writing the time series
+- `completed_in_window`: Number of requests that finished inside the rolling window
+- `qps`: Computed as `completed_in_window / window_seconds`
+- `inflight_requests`: Number of requests currently in downloader flight for that domain
+- `avg_latency_ms`: Average downloader latency observed inside the same rolling window
+
+Example:
+
+```bash
+make experiment-autothrottle \
+  EXPERIMENT_LABEL=auto-qps \
+  EXPERIMENT_LIMIT=100 \
+  CRAWLER_DOMAIN_QPS_LOG_INTERVAL=1.0 \
+  CRAWLER_DOMAIN_QPS_WINDOW_SECONDS=5.0
+```
 
 ## Repo Layout
 
