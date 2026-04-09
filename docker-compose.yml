@@ -1,18 +1,18 @@
 services:
   postgres:
     image: postgres:16
-    container_name: postgres
+    container_name: ${POSTGRES_CONTAINER_NAME:-postgres}
     command: >
-      -c max_connections=500
-      -c max_wal_size=20GB
-      -c checkpoint_timeout=15min
+      -c max_connections=${POSTGRES_MAX_CONNECTIONS:-500}
+      -c max_wal_size=${POSTGRES_MAX_WAL_SIZE:-20GB}
+      -c checkpoint_timeout=${POSTGRES_CHECKPOINT_TIMEOUT:-15min}
     restart: unless-stopped
     environment:
       - POSTGRES_USER=crawler
       - POSTGRES_PASSWORD=crawler
       - POSTGRES_DB=crawlerdb
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ${DATA_POSTGRES_DIR:-./data/postgres}:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -30,12 +30,15 @@ services:
     build:
       context: .
       dockerfile: containers/scheduler_control/Dockerfile
-    container_name: scheduler_control
+    container_name: ${SCHEDULER_CONTROL_CONTAINER_NAME:-scheduler_control}
     init: true
     restart: unless-stopped
+    environment:
+      SCHEDULER_CONTROL_CONFIG: ${SCHEDULER_CONTROL_CONFIG:-/app/containers/scheduler_control/config/control.yaml}
+      SCHEDULER_CONTROL_OFFERER_PROCS: ${SCHEDULER_CONTROL_OFFERER_PROCS:-16}
     volumes:
       - ./:/app
-      - ./data/ipc:/data/ipc
+      - ${DATA_IPC_DIR:-./data/ipc}:/data/ipc
     logging:
       driver: json-file
       options:
@@ -46,12 +49,17 @@ services:
     build:
       context: .
       dockerfile: containers/scheduler_ingest/Dockerfile
-    container_name: scheduler_ingest
+    container_name: ${SCHEDULER_INGEST_CONTAINER_NAME:-scheduler_ingest}
     init: true
     restart: unless-stopped
+    environment:
+      SCHEDULER_INGEST_CONFIG: ${SCHEDULER_INGEST_CONFIG:-/app/containers/scheduler_ingest/config/ingest.yaml}
+      SCHEDULER_INGEST_ROUTER_PROCS: ${SCHEDULER_INGEST_ROUTER_PROCS:-16}
+      SCHEDULER_INGEST_INGESTOR_PROCS: ${SCHEDULER_INGEST_INGESTOR_PROCS:-16}
+      SCHEDULER_INGEST_EXTRACTOR_PROCS: ${SCHEDULER_INGEST_EXTRACTOR_PROCS:-16}
     volumes:
       - ./:/app
-      - ./data/ipc:/data/ipc
+      - ${DATA_IPC_DIR:-./data/ipc}:/data/ipc
     logging:
       driver: json-file
       options:
@@ -62,9 +70,10 @@ services:
     build:
       context: .
       dockerfile: containers/crawler/Dockerfile
-    container_name: crawler
+    container_name: ${CRAWLER_CONTAINER_NAME:-crawler}
     init: true
     environment:
+      CRAWLER_NUMPROCS: ${CRAWLER_NUMPROCS:-16}
       CRAWLER_USE_AUTOTHROTTLE: ${CRAWLER_USE_AUTOTHROTTLE:-true}
       CRAWLER_CONCURRENT_REQUESTS: ${CRAWLER_CONCURRENT_REQUESTS:-128}
       CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN: ${CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN:-8}
@@ -73,16 +82,20 @@ services:
       CRAWLER_AUTOTHROTTLE_MAX_DELAY: ${CRAWLER_AUTOTHROTTLE_MAX_DELAY:-15.0}
       CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY: ${CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY:-2.0}
       CRAWLER_AUTOTHROTTLE_DEBUG: ${CRAWLER_AUTOTHROTTLE_DEBUG:-false}
+      CRAWLER_LOG_LEVEL: ${CRAWLER_LOG_LEVEL:-WARNING}
+      CRAWLER_METRICS_DIR_TEMPLATE: ${CRAWLER_METRICS_DIR_TEMPLATE:-/data/ipc/metrics/crawler_{id:02d}}
+      CRAWLER_DOMAIN_QPS_LOG_ENABLED: ${CRAWLER_DOMAIN_QPS_LOG_ENABLED:-false}
+      CRAWLER_DOMAIN_QPS_LOG_INTERVAL: ${CRAWLER_DOMAIN_QPS_LOG_INTERVAL:-1.0}
+      CRAWLER_DOMAIN_QPS_WINDOW_SECONDS: ${CRAWLER_DOMAIN_QPS_WINDOW_SECONDS:-5.0}
     dns:
       - 8.8.8.8
       - 1.1.1.1
     restart: unless-stopped
     volumes:
       - ./:/app
-      - ./data/ipc:/data/ipc
+      - ${DATA_IPC_DIR:-./data/ipc}:/data/ipc
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "10"
-

@@ -13,4 +13,5 @@ tmp/
 data/ipc/
 data/postgres/
 data/experiments/
+data/benchmarks/
 data/urls.txt

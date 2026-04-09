@@ -81,6 +81,151 @@ Example:
 make summarize-crawl RESULT_MINUTES=15 RESULT_LABEL=smoke
 ```
 
+## Small Continuous Mode
+
+If you want the crawler to keep running, keep discovering new URLs, and keep feeding them back into the pipeline like the original full project, do not use the one-shot `experiment-*` commands.
+
+Use the small continuous mode instead:
+
+```bash
+make bootstrap-small
+```
+
+This mode still runs the full pipeline:
+
+1. `offerer` keeps selecting crawl candidates from PostgreSQL
+2. `crawler` keeps fetching pages
+3. `router` keeps converting crawl results and discovered outlinks
+4. `ingestor` keeps inserting new URLs and updating URL state
+5. `feature_extractor` keeps computing content features
+6. `stats_aggregator` keeps aggregating counters
+
+The difference is that the resource envelope is reduced:
+
+- PostgreSQL tuning is smaller
+- `offerer` runs as a single worker
+- `crawler` runs as a single worker by default
+- `router`, `ingestor`, and `feature_extractor` each run as a single worker
+- shard routing is collapsed so one worker can cover the whole dataset
+
+Useful commands:
+
+```bash
+make bootstrap-small
+make up-small
+make crawler-fixed-small
+make crawler-autothrottle-small
+```
+
+Small continuous mode parameters:
+
+- `SMALL_URL_FILE`: Seed file used during bootstrap. Default: `/app/seeds/urls.txt`
+- `SMALL_NUM_SHARDS`: Total shard count used for schema init. Keep this at `256` unless you are changing the schema layout too. Default: `256`
+- `SMALL_SHARDS_PER_INGESTOR`: Shards assigned to each ingestor in small mode. `256` means all shards go to ingestor `0`. Default: `256`
+- `SMALL_INGEST_SERVICE`: Service used for init/seed/repair during bootstrap. Default: `scheduler_ingest`
+- `SMALL_POSTGRES_MAX_CONNECTIONS`: Reduced PostgreSQL connection cap. Default: `50`
+- `SMALL_POSTGRES_MAX_WAL_SIZE`: Reduced PostgreSQL WAL budget. Default: `1GB`
+- `SMALL_POSTGRES_CHECKPOINT_TIMEOUT`: Reduced PostgreSQL checkpoint timeout. Default: `5min`
+- `SMALL_SCHEDULER_CONTROL_CONFIG`: Control-plane config used by `offerer` and `accounting_rolloff`. Default: `/app/containers/scheduler_control/config/control.small.yaml`
+- `SMALL_SCHEDULER_INGEST_CONFIG`: Ingest-plane config used by `router`, `ingestor`, `feature_extractor`, and `stats_aggregator`. Default: `/app/containers/scheduler_ingest/config/ingest.small.yaml`
+- `SMALL_SCHEDULER_CONTROL_OFFERER_PROCS`: Number of `offerer` workers. Default: `1`
+- `SMALL_SCHEDULER_INGEST_ROUTER_PROCS`: Number of `router` workers. Default: `1`
+- `SMALL_SCHEDULER_INGEST_INGESTOR_PROCS`: Number of `ingestor` workers. Default: `1`
+- `SMALL_SCHEDULER_INGEST_EXTRACTOR_PROCS`: Number of `feature_extractor` workers. Default: `1`
+- `SMALL_CRAWLER_NUMPROCS`: Number of Scrapy crawler workers. Default: `1`
+- `SMALL_CRAWLER_CONCURRENT_REQUESTS`: Global Scrapy concurrency for each crawler worker. Default: `8`
+- `SMALL_CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN`: Per-domain concurrency cap. Default: `2`
+- `SMALL_CRAWLER_DOWNLOAD_DELAY`: Fixed-mode delay between requests. Default: `1.0`
+- `SMALL_CRAWLER_AUTOTHROTTLE_START_DELAY`: AutoThrottle initial delay. Default: `1.0`
+- `SMALL_CRAWLER_AUTOTHROTTLE_MAX_DELAY`: AutoThrottle max delay. Default: `15.0`
+- `SMALL_CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY`: AutoThrottle target concurrency. Default: `1.0`
+- `SMALL_CRAWLER_LOG_LEVEL`: Scrapy log level. Default: `WARNING`
+
+Example:
+
+```bash
+make bootstrap-small \
+  SMALL_CRAWLER_NUMPROCS=1 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS=4 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN=1
+
+make crawler-autothrottle-small \
+  SMALL_CRAWLER_NUMPROCS=1 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS=4 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN=1 \
+  SMALL_CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY=1.0
+```
+
+## Small Benchmark Commands
+
+If you want a duration-based comparison run, use the benchmark commands instead of `bootstrap-small` or `experiment-*`.
+
+These commands:
+
+1. Create an isolated benchmark data directory under `data/benchmarks/<label>/<mode>`
+2. Start a fresh small PostgreSQL + full small pipeline
+3. Seed the same initial URL set
+4. Run for the configured duration
+5. Stop the isolated stack
+6. Write a crawl summary, metadata file, compose log, and domain-QPS metrics path
+
+Run a 6-hour fixed-QPS benchmark:
+
+```bash
+make benchmark-small-fixed BENCHMARK_LABEL=trial BENCHMARK_HOURS=6
+```
+
+Run a 6-hour AutoThrottle benchmark:
+
+```bash
+make benchmark-small-autothrottle BENCHMARK_LABEL=trial BENCHMARK_HOURS=6
+```
+
+Run both sequentially with isolated state for each mode:
+
+```bash
+make benchmark-small-compare BENCHMARK_LABEL=trial BENCHMARK_HOURS=6
+```
+
+`benchmark-small-compare` runs `fixed` first and `autothrottle` second, so total wall-clock time is roughly double the configured duration plus bootstrap time.
+
+Benchmark parameters:
+
+- `BENCHMARK_LABEL`: Benchmark run label. Output root becomes `data/benchmarks/<label>/<mode>`. If omitted, a UTC timestamp label is generated.
+- `BENCHMARK_HOURS`: Benchmark duration in hours. Default: `6`
+- `BENCHMARK_SECONDS`: Optional exact duration in seconds. If set, it overrides `BENCHMARK_HOURS`
+- `BENCHMARK_RESET`: Set to `true` to overwrite an existing benchmark output directory for the same label and mode. Default: `false`
+- `BENCHMARK_DOMAIN_QPS_LOG_ENABLED`: Whether to record per-domain QPS metrics during the benchmark. Default: `true`
+- `BENCHMARK_DOMAIN_QPS_LOG_INTERVAL`: QPS sampling interval in seconds. Default: `1.0`
+- `BENCHMARK_DOMAIN_QPS_WINDOW_SECONDS`: Rolling QPS window size in seconds. Default: `5.0`
+
+Benchmark outputs:
+
+- `data/benchmarks/<label>/<mode>/summary/crawl_summary.txt`: Summary generated from crawler result files inside the benchmark time window
+- `data/benchmarks/<label>/<mode>/summary/benchmark_meta.txt`: Effective benchmark parameters and timestamps
+- `data/benchmarks/<label>/<mode>/summary/compose.log`: Captured compose logs for the isolated stack
+- `data/benchmarks/<label>/<mode>/ipc/metrics/.../domain_qps.jsonl`: Per-domain QPS time series for graphing
+
+Recommended example:
+
+```bash
+make benchmark-small-fixed \
+  BENCHMARK_LABEL=compare-6h \
+  BENCHMARK_HOURS=6 \
+  SMALL_CRAWLER_NUMPROCS=1 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS=4 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN=1 \
+  SMALL_CRAWLER_DOWNLOAD_DELAY=1.0
+
+make benchmark-small-autothrottle \
+  BENCHMARK_LABEL=compare-6h \
+  BENCHMARK_HOURS=6 \
+  SMALL_CRAWLER_NUMPROCS=1 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS=4 \
+  SMALL_CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN=1 \
+  SMALL_CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY=1.0
+```
+
 ## Lightweight Experiment Commands
 
 Run a lightweight fixed-QPS experiment against a small seed subset without starting PostgreSQL or schedulers:
