@@ -10,6 +10,10 @@ URL_FILE="${URL_FILE:-/app/seeds/urls.txt}"
 NUM_SHARDS="${NUM_SHARDS:-256}"
 SHARDS_PER_INGESTOR="${SHARDS_PER_INGESTOR:-16}"
 INGEST_SERVICE="${INGEST_SERVICE:-scheduler_ingest}"
+POSTGRES_HOST_DIR="${POSTGRES_HOST_DIR:-./data/postgres}"
+IPC_HOST_DIR="${IPC_HOST_DIR:-./data/ipc}"
+
+mkdir -p "$POSTGRES_HOST_DIR" "$IPC_HOST_DIR"
 
 docker compose up -d postgres
 

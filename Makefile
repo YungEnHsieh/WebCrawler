@@ -1,3 +1,13 @@
+ifneq (,$(wildcard .env))
+include .env
+endif
+
+COMPOSE_PROJECT_NAME ?= webcrawler
+POSTGRES_PORT ?= 5432
+POSTGRES_HOST_DIR ?= ./data/postgres
+IPC_HOST_DIR ?= ./data/ipc
+CRAWL_RESULT_ROOT ?= $(IPC_HOST_DIR)/crawl_result
+
 DSN ?= postgresql+psycopg2://crawler:crawler@postgres:5432/crawlerdb
 URL_FILE ?= /app/seeds/urls.txt
 NUM_SHARDS ?= 256
@@ -5,6 +15,17 @@ SHARDS_PER_INGESTOR ?= 16
 INGEST_SERVICE ?= scheduler_ingest
 RESULT_MINUTES ?= 60
 RESULT_LABEL ?= run
+
+export COMPOSE_PROJECT_NAME
+export POSTGRES_PORT
+export POSTGRES_HOST_DIR
+export IPC_HOST_DIR
+export CRAWL_RESULT_ROOT
+export DSN
+export URL_FILE
+export NUM_SHARDS
+export SHARDS_PER_INGESTOR
+export INGEST_SERVICE
 
 .PHONY: bootstrap init-db seed-urls repair-crawl-flags up-postgres up crawler-fixed crawler-autothrottle summarize-crawl
 
@@ -45,5 +66,6 @@ crawler-autothrottle:
 
 summarize-crawl:
 	python3 scripts/summarize_crawl_results.py \
+		--root "$(CRAWL_RESULT_ROOT)" \
 		--minutes "$(RESULT_MINUTES)" \
 		--label "$(RESULT_LABEL)"

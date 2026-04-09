@@ -14,7 +14,7 @@ Common runtime properties on non-DB services:
 - `init: true`
 - `restart: unless-stopped`
 - bind mount source code: `./:/app`
-- shared IPC mount: `/data/ipc:/data/ipc`
+- shared IPC mount: `${IPC_HOST_DIR:-./data/ipc}:/data/ipc`
 - JSON file log driver with rotation:
   - `max-size: 50m`
   - `max-file: 10`
@@ -86,13 +86,13 @@ Implication:
 
 ## 5.7 Data Durability
 
-- DB durability: persisted via `/data/postgres` mount.
-- IPC data durability: persisted via `/data/ipc` mount.
+- DB durability: persisted via `${POSTGRES_HOST_DIR:-./data/postgres}` on the host.
+- IPC data durability: persisted via `${IPC_HOST_DIR:-./data/ipc}` on the host.
 - Queue/crawl/stats files survive container restarts if host paths persist.
 
 ## 5.8 Deployment Checklist
 
-1. Ensure `/data/postgres` and `/data/ipc` exist with writable permissions.
+1. Ensure `${POSTGRES_HOST_DIR}` and `${IPC_HOST_DIR}` exist with writable permissions, or let `make bootstrap` create them.
 2. Initialize DB schema (all non-sharded + 256 shard table families).
 3. Verify YAML DSN host resolves from containers.
 4. Confirm shard parameters match schema generation.

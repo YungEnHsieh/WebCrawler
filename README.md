@@ -30,6 +30,31 @@ To start the stack again later without re-seeding:
 make up
 ```
 
+## Run Multiple Instances On One Machine
+
+This project can coexist with another instance on the same host, but each stack needs its own:
+
+- Compose project name
+- PostgreSQL host port
+- Runtime data directories
+
+Copy the example env file and adjust the values before starting a second stack:
+
+```bash
+cp .env.example .env
+```
+
+Example `.env` for a second instance:
+
+```dotenv
+COMPOSE_PROJECT_NAME=webcrawler_b
+POSTGRES_PORT=55432
+POSTGRES_HOST_DIR=./runtime/webcrawler_b/postgres
+IPC_HOST_DIR=./runtime/webcrawler_b/ipc
+```
+
+Docker Compose will read `.env` automatically, and `make` will use the same values for commands like `make bootstrap`, `make up`, and `make summarize-crawl`.
+
 ## Common Commands
 
 Start only PostgreSQL:
@@ -63,3 +88,5 @@ make summarize-crawl
 - [`data/postgres`](/Users/enoch/Desktop/WebCrawler/data/postgres): runtime PostgreSQL data directory
 
 `data/ipc` and `data/postgres` are runtime-only and are ignored by git.
+
+If you override `POSTGRES_HOST_DIR` or `IPC_HOST_DIR`, runtime data will go to those paths instead.

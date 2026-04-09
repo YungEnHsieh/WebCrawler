@@ -5,10 +5,11 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
 
 
-DEFAULT_ROOT = "data/ipc/crawl_result"
+DEFAULT_ROOT = os.environ.get("CRAWL_RESULT_ROOT", "data/ipc/crawl_result")
 
 
 def parse_ts(raw: str) -> datetime:
@@ -22,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--root",
         default=DEFAULT_ROOT,
-        help="Root crawl_result directory. Default: data/ipc/crawl_result",
+        help="Root crawl_result directory. Default: CRAWL_RESULT_ROOT or data/ipc/crawl_result",
     )
     parser.add_argument(
         "--minutes",

@@ -11,8 +11,8 @@ Defined in `docker-compose.yml`:
   - `max_connections=500`
   - `max_wal_size=20GB`
   - `checkpoint_timeout=15min`
-- Persistent volume: `/data/postgres:/var/lib/postgresql/data`
-- Exposed port: `5432`
+- Persistent volume: `${POSTGRES_HOST_DIR:-./data/postgres}:/var/lib/postgresql/data`
+- Exposed host port: `${POSTGRES_PORT:-5432}`
 
 Primary role:
 
