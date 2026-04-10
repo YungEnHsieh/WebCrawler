@@ -137,6 +137,25 @@ def iter_candidate_paths(root: Path, since: datetime, until: datetime) -> Iterat
         current += timedelta(minutes=1)
 
 
+def iter_jsonl_records(path: Path) -> Iterator[dict]:
+    with path.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                print(
+                    f"warning: skipped malformed JSONL line at {path}:{line_no}",
+                    flush=True,
+                )
+                continue
+            if not isinstance(rec, dict):
+                continue
+            yield rec
+
+
 def iter_buckets(since: datetime, until: datetime, bucket_seconds: int) -> list[datetime]:
     buckets: list[datetime] = []
     current = floor_to_bucket(since, bucket_seconds)
@@ -158,25 +177,20 @@ def aggregate(
     domain_totals: Counter[str] = Counter()
 
     for path in iter_candidate_paths(root, since, until):
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                rec = json.loads(line)
-                fetched_at = rec.get("fetched_at")
-                if not fetched_at:
-                    continue
-                ts = parse_ts(fetched_at)
-                if ts < since or ts >= until:
-                    continue
+        for rec in iter_jsonl_records(path):
+            fetched_at = rec.get("fetched_at")
+            if not fetched_at:
+                continue
+            ts = parse_ts(fetched_at)
+            if ts < since or ts >= until:
+                continue
 
-                bucket = floor_to_bucket(ts, bucket_seconds)
-                domain = str(rec.get("domain") or "(unknown)")
+            bucket = floor_to_bucket(ts, bucket_seconds)
+            domain = str(rec.get("domain") or "(unknown)")
 
-                total_counts[bucket] += 1
-                domain_counts[domain][bucket] += 1
-                domain_totals[domain] += 1
+            total_counts[bucket] += 1
+            domain_counts[domain][bucket] += 1
+            domain_totals[domain] += 1
 
     return buckets, total_counts, domain_counts, domain_totals
 

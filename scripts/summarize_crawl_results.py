@@ -100,6 +100,25 @@ def iter_candidate_paths(root: Path, since: datetime, until: datetime) -> Iterat
         current += timedelta(minutes=1)
 
 
+def iter_jsonl_records(path: Path) -> Iterator[dict]:
+    with path.open("r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                print(
+                    f"warning: skipped malformed JSONL line at {path}:{line_no}",
+                    flush=True,
+                )
+                continue
+            if not isinstance(rec, dict):
+                continue
+            yield rec
+
+
 def main() -> None:
     args = parse_args()
     since, until = resolve_window(args)
@@ -118,39 +137,34 @@ def main() -> None:
     http_429 = 0
 
     for path in iter_candidate_paths(root, since, until):
-        with path.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                rec = json.loads(line)
-                fetched_at = rec.get("fetched_at")
-                if not fetched_at:
-                    continue
+        for rec in iter_jsonl_records(path):
+            fetched_at = rec.get("fetched_at")
+            if not fetched_at:
+                continue
 
-                ts = parse_ts(fetched_at)
-                if ts < since or ts >= until:
-                    continue
+            ts = parse_ts(fetched_at)
+            if ts < since or ts >= until:
+                continue
 
-                total += 1
-                url = rec.get("url")
-                domain = rec.get("domain")
-                status = rec.get("status")
-                fail_reason = rec.get("fail_reason")
+            total += 1
+            url = rec.get("url")
+            domain = rec.get("domain")
+            status = rec.get("status")
+            fail_reason = rec.get("fail_reason")
 
-                if url:
-                    urls.add(str(url))
-                if domain:
-                    domains.add(str(domain))
+            if url:
+                urls.add(str(url))
+            if domain:
+                domains.add(str(domain))
 
-                if status == "ok":
-                    ok += 1
-                else:
-                    fail += 1
-                    if fail_reason:
-                        fail_reasons[str(fail_reason)] += 1
-                        if str(fail_reason).startswith("HttpError 429"):
-                            http_429 += 1
+            if status == "ok":
+                ok += 1
+            else:
+                fail += 1
+                if fail_reason:
+                    fail_reasons[str(fail_reason)] += 1
+                    if str(fail_reason).startswith("HttpError 429"):
+                        http_429 += 1
 
     duration_hours = (until - since).total_seconds() / 3600.0
 
