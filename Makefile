@@ -15,6 +15,11 @@ SHARDS_PER_INGESTOR ?= 16
 INGEST_SERVICE ?= scheduler_ingest
 RESULT_MINUTES ?= 60
 RESULT_LABEL ?= run
+PLOT_MINUTES ?= 60
+PLOT_BUCKET_SECONDS ?= 60
+PLOT_TOP_DOMAINS ?= 8
+PLOT_OUTPUT ?= tmp/crawl_metrics.html
+CLEANUP_MAX_BUCKETS ?= 0
 
 export COMPOSE_PROJECT_NAME
 export POSTGRES_PORT
@@ -27,7 +32,7 @@ export NUM_SHARDS
 export SHARDS_PER_INGESTOR
 export INGEST_SERVICE
 
-.PHONY: bootstrap init-db seed-urls repair-crawl-flags up-postgres up crawler-fixed crawler-autothrottle summarize-crawl
+.PHONY: bootstrap init-db seed-urls repair-crawl-flags up-postgres up crawler-fixed crawler-autothrottle summarize-crawl plot-crawl-metrics cleanup-ingestor-buckets cleanup-ingestor-buckets-apply
 
 bootstrap:
 	bash scripts/bootstrap.sh
@@ -69,3 +74,22 @@ summarize-crawl:
 		--root "$(CRAWL_RESULT_ROOT)" \
 		--minutes "$(RESULT_MINUTES)" \
 		--label "$(RESULT_LABEL)"
+
+plot-crawl-metrics:
+	python3 scripts/plot_crawl_metrics.py \
+		--root "$(CRAWL_RESULT_ROOT)" \
+		--minutes "$(PLOT_MINUTES)" \
+		--bucket-seconds "$(PLOT_BUCKET_SECONDS)" \
+		--top-domains "$(PLOT_TOP_DOMAINS)" \
+		--output "$(PLOT_OUTPUT)"
+
+cleanup-ingestor-buckets:
+	python3 scripts/cleanup_ingestor_buckets.py \
+		--crawl-root "$(CRAWL_RESULT_ROOT)" \
+		--max-buckets "$(CLEANUP_MAX_BUCKETS)"
+
+cleanup-ingestor-buckets-apply:
+	python3 scripts/cleanup_ingestor_buckets.py \
+		--crawl-root "$(CRAWL_RESULT_ROOT)" \
+		--max-buckets "$(CLEANUP_MAX_BUCKETS)" \
+		--apply

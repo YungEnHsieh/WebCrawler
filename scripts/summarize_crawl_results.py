@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+from typing import Iterator
 
 
 DEFAULT_ROOT = os.environ.get("CRAWL_RESULT_ROOT", "data/ipc/crawl_result")
@@ -74,6 +75,31 @@ class Summary:
     unique_domains: int = 0
 
 
+def floor_to_minute(ts: datetime) -> datetime:
+    return ts.replace(second=0, microsecond=0)
+
+
+def iter_candidate_paths(root: Path, since: datetime, until: datetime) -> Iterator[Path]:
+    crawler_dirs = [
+        entry.path
+        for entry in os.scandir(root)
+        if entry.is_dir() and entry.name.startswith("crawler_")
+    ]
+
+    current = floor_to_minute(since)
+    while current < until:
+        ymd = current.strftime("%Y%m%d")
+        hm = current.strftime("%H%M")
+        for crawler_dir in crawler_dirs:
+            minute_dir = Path(crawler_dir) / ymd / hm
+            if not minute_dir.is_dir():
+                continue
+            for entry in os.scandir(minute_dir):
+                if entry.is_file() and entry.name.endswith(".jsonl"):
+                    yield Path(entry.path)
+        current += timedelta(minutes=1)
+
+
 def main() -> None:
     args = parse_args()
     since, until = resolve_window(args)
@@ -91,7 +117,7 @@ def main() -> None:
     fail = 0
     http_429 = 0
 
-    for path in root.glob("crawler_*/*/*/*.jsonl"):
+    for path in iter_candidate_paths(root, since, until):
         with path.open("r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()

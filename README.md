@@ -81,6 +81,36 @@ Summarize the last hour of crawl results:
 make summarize-crawl
 ```
 
+Generate an offline HTML report with crawl volume and domain QPS charts:
+
+```bash
+make plot-crawl-metrics
+```
+
+Preview which `ingestor_*` buckets are safe to delete after both ingestor and extractor have processed them:
+
+```bash
+make cleanup-ingestor-buckets
+```
+
+Actually delete those processed `ingestor_*` buckets:
+
+```bash
+make cleanup-ingestor-buckets-apply
+```
+
+To chart specific domains instead of the default top domains, run the script directly:
+
+```bash
+python3 scripts/plot_crawl_metrics.py \
+  --root data/ipc/crawl_result \
+  --minutes 60 \
+  --bucket-seconds 60 \
+  --domain wikipedia.org \
+  --domain reddit.com \
+  --output tmp/crawl_metrics.html
+```
+
 ## Repo Layout
 
 - [`seeds/urls.txt`](/Users/enoch/Desktop/WebCrawler/seeds/urls.txt): tracked seed URLs
