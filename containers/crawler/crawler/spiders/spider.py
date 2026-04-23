@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 import tldextract
 from w3lib.url import canonicalize_url
 from datetime import datetime
+from urllib.parse import urlparse
 
 import scrapy
 from scrapy import signals
@@ -12,6 +15,9 @@ from scrapy.spidermiddlewares.httperror import HttpError
 
 from crawler.items import PageItem
 from crawler.queue_consumer import QueueConsumer
+from libs.obslog import configure as configure_logging
+
+logger = logging.getLogger("crawler")
 
 ACCEPTED_CONTENT_TYPES = ["text/html", "application/xhtml+xml"]
 
@@ -21,6 +27,7 @@ class HtmlSpider(scrapy.Spider):
     def __init__(self, crawler_id: int = 0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.crawler_id = int(crawler_id)
+        configure_logging(service="crawler", worker_id=self.crawler_id)
         self._inflight = 0
         self._max_inflight = 0
         self._max_transferring = 0
@@ -86,19 +93,25 @@ class HtmlSpider(scrapy.Spider):
             "slots": len(slots),
         }
 
-    def _runtime_suffix(self) -> str:
-        runtime = self._downloader_runtime()
-        return (
-            f"active_domains={len(self._domain_pending)}, "
-            f"pending={self._pending_requests}, pending_max={self._max_pending_requests}, "
-            f"inflight={self._inflight}, inflight_max={self._max_inflight}, "
-            f"transferring={runtime['transferring']}, transferring_max={self._max_transferring}, "
-            f"slot_queue={runtime['slot_queue']}, slot_queue_max={self._max_slot_queue}, "
-            f"slot_active={runtime['slot_active']}, slots={runtime['slots']}"
-        )
-
     def _log(self, message: str):
-        print(f"[crawler-{self.crawler_id:02d}] {message}, {self._runtime_suffix()}", flush=True)
+        runtime = self._downloader_runtime()
+        logger.info(
+            message,
+            extra={
+                "event": "spider.stats",
+                "active_domains": len(self._domain_pending),
+                "pending": self._pending_requests,
+                "pending_max": self._max_pending_requests,
+                "inflight": self._inflight,
+                "inflight_max": self._max_inflight,
+                "transferring": runtime["transferring"],
+                "transferring_max": self._max_transferring,
+                "slot_queue": runtime["slot_queue"],
+                "slot_queue_max": self._max_slot_queue,
+                "slot_active": runtime["slot_active"],
+                "slots": runtime["slots"],
+            },
+        )
 
     def _build_request(self, url: str, domain_id: int) -> scrapy.Request:
         self._domain_pending[domain_id] = self._domain_pending.get(domain_id, 0) + 1
@@ -241,24 +254,63 @@ class HtmlSpider(scrapy.Spider):
             outlinks=[],
         )
 
+        status = None
         if failure.check(HttpError):
-            item["fail_reason"] = f"HttpError {failure.value.response.status}"
+            status = failure.value.response.status
+            item["fail_reason"] = f"HttpError {status}"
         elif failure.check(IgnoreRequest):
             item["fail_reason"] = f"IgnoreRequest {failure.getErrorMessage()}"
             if "exceeded DOWNLOAD_MAXSIZE" in item["fail_reason"]:
                 item["fail_reason"] = f"IgnoreRequest exceeded DOWNLOAD_MAXSIZE"
 
+        logger.warning(
+            "request.fail",
+            extra={
+                "event": "request.fail",
+                "url": url,
+                "domain": self._host(url),
+                "fail_reason": item["fail_reason"],
+                "status": status,
+            },
+        )
         self._finish_owned_request(reason="errback", domain_id=track_domain_id)
         yield item
 
+    def _host(self, url: str) -> str:
+        return (urlparse(url).hostname or "").lower()
+
     def req_scheduled(self, request):
-        t = datetime.now()
-        print(f"[crawler-{self.crawler_id:02d}] Request scheduled: time={t}, url={request.url}", flush=True)
+        logger.info(
+            "request.scheduled",
+            extra={
+                "event": "request.scheduled",
+                "url": request.url,
+                "domain": self._host(request.url),
+            },
+        )
     def req_start(self, request):
         t = datetime.now()
-        print(f"[crawler-{self.crawler_id:02d}] Download started: time={t}, url={request.url}", flush=True)
         request.meta["t_down_start"] = t
+        logger.info(
+            "request.start",
+            extra={
+                "event": "request.start",
+                "url": request.url,
+                "domain": self._host(request.url),
+            },
+        )
     def req_end(self, response, request):
         t = datetime.now()
-        print(f"[crawler-{self.crawler_id:02d}] Download ended: time={t}, url={request.url}, latency={t - request.meta.get("t_down_start", t)}", flush=True)
+        started = request.meta.get("t_down_start", t)
+        latency_ms = int((t - started).total_seconds() * 1000)
+        logger.info(
+            "request.end",
+            extra={
+                "event": "request.end",
+                "url": request.url,
+                "domain": self._host(request.url),
+                "status": response.status,
+                "latency_ms": latency_ms,
+            },
+        )
 

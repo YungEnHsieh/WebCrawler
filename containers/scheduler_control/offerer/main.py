@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from libs.config.loader import load_yaml, require
+from libs.obslog import configure as configure_logging
 
 from .service import OffererDerivation, OffererConfig, OffererService
 from .selection.example_strategy import ExampleStrategy
@@ -16,6 +17,7 @@ def main() -> None:
     ap.add_argument("--offerer-id", type=int, required=True)
     args = ap.parse_args()
 
+    configure_logging(service="offerer", worker_id=args.offerer_id)
     raw = load_yaml(args.config)
 
     offerer = require(raw, "offerer")
