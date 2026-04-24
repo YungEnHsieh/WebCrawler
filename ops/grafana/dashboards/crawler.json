@@ -44,7 +44,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "sum by (worker_id) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.dispatch\"}[1m]))",
+          "expr": "sum by (worker_id) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.start\"}[1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
@@ -73,10 +73,12 @@
         "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "calcs": ["mean", "max"]},
         "tooltip": {"mode": "multi", "sort": "desc"}
       },
+      "interval": "30s",
+      "maxDataPoints": 60,
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "topk(10, sum by (domain) (count_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.dispatch\"} | json domain=\"domain\" [1m])) / 60)",
+          "expr": "topk(10, sum by (domain) (count_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.start\"} | json domain=\"domain\" [1m])) / 60)",
           "legendFormat": "{{domain}}",
           "refId": "A"
         }
