@@ -76,7 +76,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "topk(10, sum by (domain) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=~\"request.end|request.fail\"} | json [1m])))",
+          "expr": "topk(10, sum by (domain) (count_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.dispatch\"} | json domain=\"domain\" [1m])) / 60)",
           "legendFormat": "{{domain}}",
           "refId": "A"
         }

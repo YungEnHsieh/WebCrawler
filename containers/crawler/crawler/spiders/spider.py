@@ -67,15 +67,15 @@ class HtmlSpider(scrapy.Spider):
         if stats is None:
             return
         runtime = self._downloader_runtime()
-        stats.set_value("inflight/current", runtime["slot_active"], spider=self)
-        stats.set_value("inflight/max", self._max_slot_active, spider=self)
-        stats.set_value("pending/current", self._pending_requests, spider=self)
-        stats.set_value("pending/max", self._max_pending_requests, spider=self)
-        stats.set_value("active_domains/current", len(self._domain_pending), spider=self)
-        stats.set_value("transferring/current", runtime["transferring"], spider=self)
-        stats.set_value("transferring/max", self._max_transferring, spider=self)
-        stats.set_value("slot_queue/current", runtime["slot_queue"], spider=self)
-        stats.set_value("slot_queue/max", self._max_slot_queue, spider=self)
+        stats.set_value("inflight/current", runtime["slot_active"])
+        stats.set_value("inflight/max", self._max_slot_active)
+        stats.set_value("pending/current", self._pending_requests)
+        stats.set_value("pending/max", self._max_pending_requests)
+        stats.set_value("active_domains/current", len(self._domain_pending))
+        stats.set_value("transferring/current", runtime["transferring"])
+        stats.set_value("transferring/max", self._max_transferring)
+        stats.set_value("slot_queue/current", runtime["slot_queue"])
+        stats.set_value("slot_queue/max", self._max_slot_queue)
 
     def _downloader_runtime(self) -> dict[str, int]:
         downloader = getattr(getattr(self.crawler, "engine", None), "downloader", None)
