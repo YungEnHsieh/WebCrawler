@@ -29,8 +29,7 @@ class HtmlSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.crawler_id = int(crawler_id)
         configure_logging(service="crawler", worker_id=self.crawler_id)
-        self._inflight = 0
-        self._max_inflight = 0
+        self._max_slot_active = 0
         self._max_transferring = 0
         self._max_slot_queue = 0
         self._pending_requests = 0
@@ -67,12 +66,12 @@ class HtmlSpider(scrapy.Spider):
         stats = getattr(self.crawler, "stats", None)
         if stats is None:
             return
-        stats.set_value("inflight/current", self._inflight, spider=self)
-        stats.set_value("inflight/max", self._max_inflight, spider=self)
+        runtime = self._downloader_runtime()
+        stats.set_value("inflight/current", runtime["slot_active"], spider=self)
+        stats.set_value("inflight/max", self._max_slot_active, spider=self)
         stats.set_value("pending/current", self._pending_requests, spider=self)
         stats.set_value("pending/max", self._max_pending_requests, spider=self)
         stats.set_value("active_domains/current", len(self._domain_pending), spider=self)
-        runtime = self._downloader_runtime()
         stats.set_value("transferring/current", runtime["transferring"], spider=self)
         stats.set_value("transferring/max", self._max_transferring, spider=self)
         stats.set_value("slot_queue/current", runtime["slot_queue"], spider=self)
@@ -93,6 +92,7 @@ class HtmlSpider(scrapy.Spider):
 
         self._max_transferring = max(self._max_transferring, transferring)
         self._max_slot_queue = max(self._max_slot_queue, slot_queue)
+        self._max_slot_active = max(self._max_slot_active, slot_active)
 
         return {
             "transferring": transferring,
@@ -110,8 +110,8 @@ class HtmlSpider(scrapy.Spider):
                 "active_domains": len(self._domain_pending),
                 "pending": self._pending_requests,
                 "pending_max": self._max_pending_requests,
-                "inflight": self._inflight,
-                "inflight_max": self._max_inflight,
+                "inflight": runtime["slot_active"],
+                "inflight_max": self._max_slot_active,
                 "transferring": runtime["transferring"],
                 "transferring_max": self._max_transferring,
                 "slot_queue": runtime["slot_queue"],
@@ -211,8 +211,8 @@ class HtmlSpider(scrapy.Spider):
                 "active_domains": len(self._domain_pending),
                 "pending": self._pending_requests,
                 "pending_max": self._max_pending_requests,
-                "inflight": self._inflight,
-                "inflight_max": self._max_inflight,
+                "inflight": runtime["slot_active"],
+                "inflight_max": self._max_slot_active,
                 "transferring": runtime["transferring"],
                 "transferring_max": self._max_transferring,
                 "slot_queue": runtime["slot_queue"],

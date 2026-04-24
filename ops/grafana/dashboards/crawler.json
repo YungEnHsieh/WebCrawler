@@ -44,7 +44,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "sum by (worker_id) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"}[$__rate_interval]))",
+          "expr": "sum by (worker_id) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"}[1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
@@ -76,7 +76,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "topk(10, sum by (domain) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=~\"request.end|request.fail\"} | json [$__rate_interval])))",
+          "expr": "topk(10, sum by (domain) (rate({service=\"crawler\", worker_id=~\"$worker_id\", event=~\"request.end|request.fail\"} | json [1m])))",
           "legendFormat": "{{domain}}",
           "refId": "A"
         }
@@ -149,19 +149,19 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "quantile_over_time(0.5, {service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"} | json | unwrap latency_ms [$__rate_interval])",
+          "expr": "quantile_over_time(0.5, {service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"} | json | unwrap latency_ms [1m])",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "quantile_over_time(0.95, {service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"} | json | unwrap latency_ms [$__rate_interval])",
+          "expr": "quantile_over_time(0.95, {service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"} | json | unwrap latency_ms [1m])",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "quantile_over_time(0.99, {service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"} | json | unwrap latency_ms [$__rate_interval])",
+          "expr": "quantile_over_time(0.99, {service=\"crawler\", worker_id=~\"$worker_id\", event=\"request.end\"} | json | unwrap latency_ms [1m])",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -201,7 +201,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap inflight [$__rate_interval]))",
+          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap inflight [1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
@@ -235,7 +235,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap pending [$__rate_interval]))",
+          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap pending [1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
@@ -269,7 +269,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap active_domains [$__rate_interval]))",
+          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap active_domains [1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
@@ -303,7 +303,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap transferring [$__rate_interval]))",
+          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap transferring [1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
@@ -337,7 +337,7 @@
       "targets": [
         {
           "datasource": {"type": "loki", "uid": "loki"},
-          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap slot_queue [$__rate_interval]))",
+          "expr": "avg by (worker_id) (avg_over_time({service=\"crawler\", worker_id=~\"$worker_id\", event=\"spider.heartbeat\"} | json | unwrap slot_queue [1m]))",
           "legendFormat": "crawler_{{worker_id}}",
           "refId": "A"
         }
