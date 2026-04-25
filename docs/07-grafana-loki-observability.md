@@ -133,8 +133,8 @@ docker plugin ls | grep loki   # expect: loki:latest, ENABLED=true
 
 ### 7.3.2 Loki and Grafana services
 
-Both are defined directly in `docker-compose.yml`. `docker compose up
--d` brings them up alongside the application services.
+Both are defined directly in `docker-compose.yml` alongside the
+application services.
 
 - Loki listens on host port `3100` (matching the `loki-url` in the
   `x-loki-logging` anchor).
@@ -149,10 +149,22 @@ remove the `loki` and `grafana` services from `docker-compose.yml` and
 update the `loki-url` in the `x-loki-logging` anchor to the external
 endpoint.
 
-### 7.3.3 Bring up the application stack
+### 7.3.3 Bring up the stack
+
+The compose file also declares a `postgres` service for local
+development, but production uses an external database (see the DSN in
+`containers/scheduler_control/config/control.yaml`). Start only the
+services you need explicitly — do **not** run a bare `docker compose
+up -d`, which would also start the local postgres:
 
 ```bash
-docker compose up -d --build
+# one shot — application + observability
+docker compose up -d --build \
+    scheduler_control scheduler_ingest crawler loki grafana
+
+# or in two steps (observability first, then app)
+docker compose up -d loki grafana
+docker compose up -d --build scheduler_control scheduler_ingest crawler
 ```
 
 Verify the loki driver is taking the logs (you should not see plain
