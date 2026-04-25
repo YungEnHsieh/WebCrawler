@@ -252,6 +252,7 @@ class HtmlSpider(scrapy.Spider):
                 fail_reason="NonHTML content-type",
                 content=None,
                 outlinks=[],
+                title=None,
             )
             return
 
@@ -266,6 +267,8 @@ class HtmlSpider(scrapy.Spider):
                     "anchor": (link.text or "").strip()[:200]
                 })
 
+        title = (response.xpath("//title/text()").get() or "").strip()[:500] or None
+
         self._finish_owned_request(reason="parse", domain_id=track_domain_id)
         yield PageItem(
             url=url,
@@ -273,6 +276,7 @@ class HtmlSpider(scrapy.Spider):
             fail_reason=None,
             content=response.text,
             outlinks=outlinks,
+            title=title,
         )
 
     def errback(self, failure):
@@ -288,6 +292,7 @@ class HtmlSpider(scrapy.Spider):
             fail_reason=failure.type.__name__,
             content=None,
             outlinks=[],
+            title=None,
         )
 
         status = None
