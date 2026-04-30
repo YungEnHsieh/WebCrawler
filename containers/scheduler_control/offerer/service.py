@@ -111,12 +111,30 @@ class OffererService:
             if slots_to_fill <= 0:
                 break
 
-            per_shard = self.selector.select_by_domain(
-                shard_id=sid,
-                exclude_domain_ids=exclude,
-                per_domain_cap=self.cfg.per_domain_url_cap,
-                max_domains=slots_to_fill,
-            )
+            try:
+                per_shard = self.selector.select_by_domain(
+                    shard_id=sid,
+                    exclude_domain_ids=exclude,
+                    per_domain_cap=self.cfg.per_domain_url_cap,
+                    max_domains=slots_to_fill,
+                )
+            except Exception as e:
+                logger.error(
+                    "offer.shard_error",
+                    extra={
+                        "event": "offer.shard_error",
+                        "shard_id": sid,
+                        "error": str(e),
+                    },
+                )
+                self.stats.write(
+                    source="offerer",
+                    counters={
+                        "shard_error": 1,
+                        "error_count": 1,
+                    },
+                )
+                continue
 
             for domain_id, urls in per_shard.items():
                 if not urls:
