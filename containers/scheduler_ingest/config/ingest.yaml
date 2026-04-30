@@ -9,7 +9,8 @@ router:
   shards_per_ingestor: 16
 
   # Pin top-traffic domains 32 apart so each lands on a distinct ingestor.
-  # For eTLD+1s in shard_split.yaml, pin the dominant hostname instead.
+  # eTLD+1 overrides are also the fallback shard for non-whitelisted
+  # subdomains (whitelist lives in shard_split.yaml).
   domain_overrides:
     wikipedia.org: 0
     x.com: 32
@@ -17,7 +18,7 @@ router:
     reddit.com: 96
     instagram.com: 128
     espn.com: 160
-    www.facebook.com: 192
+    facebook.com: 192
     yahoo.com: 224
 
 ingestor:
