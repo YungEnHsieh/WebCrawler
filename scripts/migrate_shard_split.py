@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Move url_state rows for eTLD+1s listed in shard_split.yaml to per-hostname
-shards. Migrates url_state_current / history / url_event_counter;
-content_feature_* and domain_stats_daily start fresh.
+Move url_state rows for hostnames listed in shard_split.yaml::split_subdomains
+out to their own per-host shards. Migrates url_state_current / history /
+url_event_counter; content_feature_* and domain_stats_daily start fresh.
 
 --execute requires scheduler_ingest to be paused.
 
@@ -16,10 +16,20 @@ from collections import Counter
 from pathlib import Path
 
 import psycopg2
+import tldextract
 
 from constants import CRAWLERDB
 from libs.config.loader import load_yaml
 from libs.db.sharding.key import compute_shard, load_sharding_config
+
+
+def parents_of(hosts: set[str]) -> set[str]:
+    parents: set[str] = set()
+    for h in hosts:
+        e = tldextract.extract(h)
+        if e.registered_domain:
+            parents.add(e.registered_domain)
+    return parents
 
 REPO = Path(__file__).resolve().parents[1]
 SPLIT_CFG = REPO / "containers/scheduler_ingest/config/shard_split.yaml"
@@ -47,7 +57,7 @@ def fetch_hostname_counts(cur, shard: int, domain_id: int) -> list[tuple[str, in
 
 
 def dry_run_one(cur, etld1: str, num_shards: int,
-                overrides: dict[str, int], split_etld1: set[str]) -> None:
+                overrides: dict[str, int], split_subdomains: set[str]) -> None:
     print(f"\n======== {etld1} ========")
     cur.execute("SELECT domain_id, shard_id FROM domain_state WHERE domain = %s", (etld1,))
     row = cur.fetchone()
@@ -69,18 +79,19 @@ def dry_run_one(cur, etld1: str, num_shards: int,
     per_host = []
     new_shard_dist: Counter[int] = Counter()
     for host, cnt in host_counts:
-        ns = compute_shard(host, num_shards, overrides, split_etld1)
-        per_host.append((host, cnt, ns))
+        ns = compute_shard(host, num_shards, overrides, split_subdomains)
+        moves = host in split_subdomains
+        per_host.append((host, cnt, ns, moves))
         new_shard_dist[ns] += cnt
 
-    rows_move = sum(c for _, c, ns in per_host if ns != cur_shard)
+    rows_move = sum(c for _, c, _, moves in per_host if moves)
     print(f"  distinct hostnames: {len(per_host):,}")
     print(f"  rows moving: {rows_move:,}  staying: {total - rows_move:,}")
 
     print("\n  top 20 hostnames:")
     print(f"    {'host':55s} {'rows':>12s} {'new_shard':>10s}")
-    for host, cnt, ns in per_host[:20]:
-        tag = "  [same]" if ns == cur_shard else ""
+    for host, cnt, ns, moves in per_host[:20]:
+        tag = "" if moves else "  [stay]"
         print(f"    {host[:55]:55s} {cnt:>12,} {ns:>10d}{tag}")
 
     print("\n  projected new shard distribution (top 15):")
@@ -202,7 +213,7 @@ def move_host(cur, host: str, old_shard: int, old_did: int,
 
 
 def execute_one(cur, etld1: str, num_shards: int,
-                overrides: dict[str, int], split_etld1: set[str]) -> None:
+                overrides: dict[str, int], split_subdomains: set[str]) -> None:
     print(f"\n======== EXECUTE {etld1} ========")
     cur.execute("SELECT domain_id, shard_id FROM domain_state WHERE domain = %s", (etld1,))
     row = cur.fetchone()
@@ -217,10 +228,10 @@ def execute_one(cur, etld1: str, num_shards: int,
 
     grand = {"current": 0, "history": 0, "event": 0}
     for host, cnt in host_counts:
-        new_shard = compute_shard(host, num_shards, overrides, split_etld1)
-        if new_shard == old_shard and host == etld1:
-            print(f"    [skip] {host:50s} stays on shard {new_shard:03d}")
+        if host not in split_subdomains:
+            print(f"    [stay] {host:50s} non-whitelisted, leaving under parent")
             continue
+        new_shard = compute_shard(host, num_shards, overrides, split_subdomains)
         new_did = ensure_domain_state(cur, host, new_shard)
         cur.connection.commit()
         stats = move_host(cur, host, old_shard, old_did, new_shard, new_did)
@@ -242,26 +253,27 @@ def main() -> None:
                    help="Actually move rows. Requires pipeline pause beforehand.")
     args = p.parse_args()
 
-    overrides, split_etld1 = load_sharding_config(INGEST_CFG, SPLIT_CFG)
-    targets = sorted(split_etld1)
-    if not targets:
-        print(f"no targets. edit {SPLIT_CFG}.")
+    overrides, split_subdomains = load_sharding_config(INGEST_CFG, SPLIT_CFG)
+    if not split_subdomains:
+        print(f"no whitelist entries. edit {SPLIT_CFG}.")
         return
+    targets = sorted(parents_of(split_subdomains))
 
     num_shards = load_num_shards()
     mode = "DRY-RUN" if args.dry_run else "EXECUTE"
     print(f"mode: {mode}")
-    print(f"split_etld1: {targets}")
-    print(f"overrides (after strip): {overrides}")
+    print(f"split_subdomains: {sorted(split_subdomains)}")
+    print(f"parents: {targets}")
+    print(f"overrides: {overrides}")
     print(f"num_shards: {num_shards}")
 
     with psycopg2.connect(**CRAWLERDB) as conn:
         with conn.cursor() as cur:
             for etld1 in targets:
                 if args.dry_run:
-                    dry_run_one(cur, etld1, num_shards, overrides, split_etld1)
+                    dry_run_one(cur, etld1, num_shards, overrides, split_subdomains)
                 else:
-                    execute_one(cur, etld1, num_shards, overrides, split_etld1)
+                    execute_one(cur, etld1, num_shards, overrides, split_subdomains)
 
 
 if __name__ == "__main__":

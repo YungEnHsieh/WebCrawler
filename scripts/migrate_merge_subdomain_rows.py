@@ -39,8 +39,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
-def domain_to_shard(domain: str, overrides: dict[str, int], split_etld1: set[str] | None = None) -> int:
-    return compute_shard(domain, NUM_SHARDS, overrides, split_etld1)
+def domain_to_shard(domain: str, overrides: dict[str, int], split_subdomains: set[str] | None = None) -> int:
+    return compute_shard(domain, NUM_SHARDS, overrides, split_subdomains)
 
 
 def canonical_domain(domain: str) -> str | None:
@@ -214,7 +214,7 @@ def main():
                         "e.g. '%%.wikipedia.org' to limit scope")
     args = p.parse_args()
 
-    overrides, split_etld1 = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
+    overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
     conn = psycopg2.connect(**CRAWLERDB)
     conn.autocommit = False
     cur = conn.cursor()
@@ -253,7 +253,7 @@ def main():
 
         totals = {"url_current": 0, "feat_current": 0, "stats_daily": 0, "domains": 0}
         for bad_domain, bad_shard, bad_did, canon in dirty:
-            canon_shard = domain_to_shard(canon, overrides, split_etld1)
+            canon_shard = domain_to_shard(canon, overrides, split_subdomains)
             if args.dry_run:
                 cur.execute("SELECT domain_id FROM domain_state WHERE domain=%s", (canon,))
                 r = cur.fetchone()

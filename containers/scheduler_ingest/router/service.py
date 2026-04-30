@@ -51,7 +51,7 @@ class RouterConfig:
     shards_per_ingestor: int
 
     domain_overrides: Dict[str, int]
-    split_etld1: Set[str]
+    split_subdomains: Set[str]
 
     postgres_dsn: str
 
@@ -63,7 +63,7 @@ class RouterService:
             num_shards=self.cfg.num_shards,
             shards_per_ingestor=self.cfg.shards_per_ingestor,
             domain_overrides=self.cfg.domain_overrides,
-            split_etld1=self.cfg.split_etld1,
+            split_subdomains=self.cfg.split_subdomains,
         )
         self.engine = create_engine(
             self.cfg.postgres_dsn,
@@ -262,7 +262,7 @@ def load_router_config(path: str, router_id: int) -> RouterConfig:
     pg = require(raw, "postgres")
 
     split_path = Path(path).parent / "shard_split.yaml"
-    overrides, split_etld1 = load_sharding_config(path, split_path)
+    overrides, split_subdomains = load_sharding_config(path, split_path)
 
     return RouterConfig(
         router_id=router_id,
@@ -275,7 +275,7 @@ def load_router_config(path: str, router_id: int) -> RouterConfig:
         num_shards=int(require(r, "num_shards")),
         shards_per_ingestor=int(require(r, "shards_per_ingestor")),
         domain_overrides=overrides,
-        split_etld1=split_etld1,
+        split_subdomains=split_subdomains,
         postgres_dsn=str(require(pg, "dsn")),
     )
 
