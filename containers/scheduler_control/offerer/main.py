@@ -9,6 +9,7 @@ from libs.config.loader import load_yaml, require
 from libs.obslog import configure as configure_logging
 
 from .service import OffererDerivation, OffererConfig, OffererService
+from .selection.golden_discovery_ranker_v1_strategy import GoldenDiscoveryRankerV1Strategy
 from .selection.example_strategy import ExampleStrategy
 from .selection.read_only_strategy import ReadOnlyStrategy
 
@@ -52,6 +53,8 @@ def main() -> None:
     strategy_name = os.environ.get("OFFERER_STRATEGY", "").lower()
     if strategy_name == "read_only":
         selector = ReadOnlyStrategy(Session=Session)
+    elif strategy_name == "golden_discovery_ranker_v1":
+        selector = GoldenDiscoveryRankerV1Strategy(Session=Session)
     else:
         selector = ExampleStrategy(Session=Session)
 
@@ -75,4 +78,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

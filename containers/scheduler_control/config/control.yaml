@@ -36,3 +36,14 @@ accounting:
 
   # If the service starts after today's schedule, run immediately once.
   catch_up_on_start: true
+
+golden_discovery_ranker_v1:
+  # Disabled by default so the production image can be reviewed/deployed before
+  # the ranker artifact is mounted. Enable with GOLDEN_DISCOVERY_RANKER_V1_ENABLED=true.
+  enabled: false
+  artifact_path: "/app/artifacts/golden_discovery_ranker_v1.joblib"
+  total_shards: 256
+  num_workers: 4
+  batch_size: 1000
+  scan_interval_sec: 60
+  max_batches_per_shard: 4
