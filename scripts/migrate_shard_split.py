@@ -138,14 +138,14 @@ def move_host(cur, host: str, old_shard: int, old_did: int,
                       last_content_update, num_scheduled_90d, num_fetch_ok_90d,
                       num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
                       last_fail_reason, content_hash, should_crawl, url_score,
-                      domain_score, source, discovered_from
+                      url_score_updated_at, domain_score, source, discovered_from
         )
         INSERT INTO {new_cur}
         SELECT url, %s AS domain_id, first_seen, last_scheduled, last_fetch_ok,
                last_content_update, num_scheduled_90d, num_fetch_ok_90d,
                num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
                last_fail_reason, content_hash, should_crawl, url_score,
-               domain_score, source, discovered_from
+               url_score_updated_at, domain_score, source, discovered_from
         FROM moved
         ON CONFLICT (url) DO NOTHING
         """,
@@ -163,14 +163,14 @@ def move_host(cur, host: str, old_shard: int, old_did: int,
                       last_content_update, num_scheduled_90d, num_fetch_ok_90d,
                       num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
                       last_fail_reason, content_hash, should_crawl, url_score,
-                      domain_score, snapshot_id, snapshot_at, source, discovered_from
+                      url_score_updated_at, domain_score, snapshot_id, snapshot_at, source, discovered_from
         )
         INSERT INTO {new_hist}
         SELECT url, %s AS domain_id, first_seen, last_scheduled, last_fetch_ok,
                last_content_update, num_scheduled_90d, num_fetch_ok_90d,
                num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
                last_fail_reason, content_hash, should_crawl, url_score,
-               domain_score, snapshot_id, snapshot_at, source, discovered_from
+               url_score_updated_at, domain_score, snapshot_id, snapshot_at, source, discovered_from
         FROM moved
         ON CONFLICT (snapshot_id) DO NOTHING
         """,

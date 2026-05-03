@@ -113,6 +113,7 @@ class CounterRolloffService:
                     c.content_hash,
                     c.should_crawl,
                     c.url_score,
+                    c.url_score_updated_at,
                     c.domain_score
             ),
             inserted_hist AS (
@@ -132,6 +133,7 @@ class CounterRolloffService:
                     content_hash,
                     should_crawl,
                     url_score,
+                    url_score_updated_at,
                     domain_score
                 )
                 SELECT
@@ -150,6 +152,7 @@ class CounterRolloffService:
                     u.content_hash,
                     u.should_crawl,
                     u.url_score,
+                    u.url_score_updated_at,
                     u.domain_score
                 FROM updated u
                 RETURNING 1

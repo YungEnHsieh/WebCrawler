@@ -106,12 +106,12 @@ def merge_one(cur, bad, good, dry_run: bool) -> dict:
            last_content_update, num_scheduled_90d, num_fetch_ok_90d,
            num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
            last_fail_reason, content_hash, should_crawl, url_score,
-           domain_score, source)
+           url_score_updated_at, domain_score, source)
         SELECT url, %s, first_seen, last_scheduled, last_fetch_ok,
                last_content_update, num_scheduled_90d, num_fetch_ok_90d,
                num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
                last_fail_reason, content_hash, should_crawl, url_score,
-               domain_score, source
+               url_score_updated_at, domain_score, source
         FROM url_state_current_{bad_shard:03d}
         WHERE domain_id = %s
         ON CONFLICT (url) DO UPDATE

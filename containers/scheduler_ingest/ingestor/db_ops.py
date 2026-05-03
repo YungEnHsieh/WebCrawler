@@ -52,6 +52,7 @@ _HIST_COLS = (
     "content_hash",
     "should_crawl",
     "url_score",
+    "url_score_updated_at",
     "domain_score",
     "source",
     "discovered_from",
