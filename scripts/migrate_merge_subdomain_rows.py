@@ -39,8 +39,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
-def domain_to_shard(domain: str, overrides: dict[str, int], split_etld1: set[str] | None = None) -> int:
-    return compute_shard(domain, NUM_SHARDS, overrides, split_etld1)
+def domain_to_shard(domain: str, overrides: dict[str, int], split_subdomains: set[str] | None = None) -> int:
+    return compute_shard(domain, NUM_SHARDS, overrides, split_subdomains)
 
 
 def canonical_domain(domain: str) -> str | None:
@@ -103,19 +103,49 @@ def merge_one(cur, bad, good, dry_run: bool) -> dict:
         f"""
         INSERT INTO url_state_current_{good_shard:03d} AS g
           (url, domain_id, first_seen, last_scheduled, last_fetch_ok,
-           last_content_update, num_scheduled_90d, num_fetch_ok_90d,
+           last_content_update, last_modified,
+           num_scheduled_90d, num_fetch_ok_90d,
            num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
            last_fail_reason, content_hash, should_crawl, url_score,
-           url_score_updated_at, domain_score, source)
+           url_score_updated_at,
+           domain_score, source, discovered_from, title, hreflang_count,
+           etag, cache_control,
+           is_redirect, redirect_hop_count, discovery_source_type,
+           parent_page_score, inlink_count_approx, inlink_count_external,
+           anchor_text, robots_bits)
         SELECT url, %s, first_seen, last_scheduled, last_fetch_ok,
-               last_content_update, num_scheduled_90d, num_fetch_ok_90d,
+               last_content_update, last_modified,
+               num_scheduled_90d, num_fetch_ok_90d,
                num_fetch_fail_90d, num_content_update_90d, num_consecutive_fail,
                last_fail_reason, content_hash, should_crawl, url_score,
-               url_score_updated_at, domain_score, source
+               url_score_updated_at,
+               domain_score, source, discovered_from, title, hreflang_count,
+               etag,
+               cache_control, is_redirect, redirect_hop_count,
+               discovery_source_type, parent_page_score,
+               inlink_count_approx, inlink_count_external, anchor_text,
+               robots_bits
         FROM url_state_current_{bad_shard:03d}
         WHERE domain_id = %s
         ON CONFLICT (url) DO UPDATE
-          SET source = GREATEST(g.source, EXCLUDED.source)
+          SET source = GREATEST(g.source, EXCLUDED.source),
+              discovered_from = COALESCE(g.discovered_from, EXCLUDED.discovered_from),
+              title = COALESCE(g.title, EXCLUDED.title),
+              hreflang_count = COALESCE(g.hreflang_count, EXCLUDED.hreflang_count),
+              last_modified = COALESCE(g.last_modified, EXCLUDED.last_modified),
+              etag = COALESCE(g.etag, EXCLUDED.etag),
+              cache_control = COALESCE(g.cache_control, EXCLUDED.cache_control),
+              is_redirect = COALESCE(g.is_redirect, EXCLUDED.is_redirect),
+              redirect_hop_count = COALESCE(g.redirect_hop_count, EXCLUDED.redirect_hop_count),
+              discovery_source_type = GREATEST(g.discovery_source_type, EXCLUDED.discovery_source_type),
+              parent_page_score = COALESCE(g.parent_page_score, EXCLUDED.parent_page_score),
+              inlink_count_approx = g.inlink_count_approx + EXCLUDED.inlink_count_approx,
+              inlink_count_external = g.inlink_count_external + EXCLUDED.inlink_count_external,
+              anchor_text = COALESCE(g.anchor_text, EXCLUDED.anchor_text),
+              robots_bits = CASE
+                WHEN EXCLUDED.robots_bits = 0 THEN g.robots_bits
+                ELSE EXCLUDED.robots_bits
+              END
         """,
         (good_did, bad_did),
     )
@@ -214,7 +244,7 @@ def main():
                         "e.g. '%%.wikipedia.org' to limit scope")
     args = p.parse_args()
 
-    overrides, split_etld1 = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
+    overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
     conn = psycopg2.connect(**CRAWLERDB)
     conn.autocommit = False
     cur = conn.cursor()
@@ -253,7 +283,7 @@ def main():
 
         totals = {"url_current": 0, "feat_current": 0, "stats_daily": 0, "domains": 0}
         for bad_domain, bad_shard, bad_did, canon in dirty:
-            canon_shard = domain_to_shard(canon, overrides, split_etld1)
+            canon_shard = domain_to_shard(canon, overrides, split_subdomains)
             if args.dry_run:
                 cur.execute("SELECT domain_id FROM domain_state WHERE domain=%s", (canon,))
                 r = cur.fetchone()

@@ -51,7 +51,7 @@ class RouterConfig:
     shards_per_ingestor: int
 
     domain_overrides: Dict[str, int]
-    split_etld1: Set[str]
+    split_subdomains: Set[str]
 
     postgres_dsn: str
 
@@ -63,7 +63,7 @@ class RouterService:
             num_shards=self.cfg.num_shards,
             shards_per_ingestor=self.cfg.shards_per_ingestor,
             domain_overrides=self.cfg.domain_overrides,
-            split_etld1=self.cfg.split_etld1,
+            split_subdomains=self.cfg.split_subdomains,
         )
         self.engine = create_engine(
             self.cfg.postgres_dsn,
@@ -134,12 +134,14 @@ class RouterService:
                             domain_resolver = DomainResolver(sess, domain_cache)
                             with sess.begin():
                                 # resolve domain_id from DB (insert if missing)
-                                domain_id, _ = domain_resolver.ensure_and_get(domain, shard_id)
+                                domain_id, domain_score = domain_resolver.ensure_and_get(domain, shard_id)
 
                                 src_url = rec.get("url")
                                 new_outlinks = []
                                 for link in outlinks:
-                                    l = self._process_link(domain_resolver, link, src_url)
+                                    l = self._process_link(
+                                        domain_resolver, link, src_url, domain, domain_score
+                                    )
                                     if l:
                                         new_outlinks.append(l)
 
@@ -154,6 +156,12 @@ class RouterService:
                             "domain_id": domain_id,
                             "content_hash": content_hash,
                             "title": rec.get("title"),
+                            "hreflang_count": rec.get("hreflang_count"),
+                            "last_modified": rec.get("last_modified"),
+                            "etag": rec.get("etag"),
+                            "cache_control": rec.get("cache_control"),
+                            "is_redirect": rec.get("is_redirect"),
+                            "redirect_hop_count": rec.get("redirect_hop_count"),
                         }
 
                         out_dir = self._out_dir(ingestor_id)
@@ -212,7 +220,14 @@ class RouterService:
             },
         )
 
-    def _process_link(self, domain_resolver: DomainResolver, link: Dict[str, str], src_url: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _process_link(
+        self,
+        domain_resolver: DomainResolver,
+        link: Dict[str, str],
+        src_url: Optional[str],
+        src_domain: str,
+        parent_page_score: float,
+    ) -> Optional[Dict[str, Any]]:
         url = link.get("url")
         anchor = link.get("anchor")
         if not url:
@@ -232,6 +247,11 @@ class RouterService:
                 "domain_id": domain_id,
                 "domain_score": domain_score,
                 "discovered_from": src_url,
+                "discovery_source_type": 1,
+                "parent_page_score": parent_page_score,
+                "inlink_count_approx": 1,
+                "inlink_count_external": int(src_domain != domain),
+                "anchor_text": anchor,
             }
 
             out_dir = self._out_dir(ingestor_id)
@@ -262,7 +282,7 @@ def load_router_config(path: str, router_id: int) -> RouterConfig:
     pg = require(raw, "postgres")
 
     split_path = Path(path).parent / "shard_split.yaml"
-    overrides, split_etld1 = load_sharding_config(path, split_path)
+    overrides, split_subdomains = load_sharding_config(path, split_path)
 
     return RouterConfig(
         router_id=router_id,
@@ -275,7 +295,6 @@ def load_router_config(path: str, router_id: int) -> RouterConfig:
         num_shards=int(require(r, "num_shards")),
         shards_per_ingestor=int(require(r, "shards_per_ingestor")),
         domain_overrides=overrides,
-        split_etld1=split_etld1,
+        split_subdomains=split_subdomains,
         postgres_dsn=str(require(pg, "dsn")),
     )
-

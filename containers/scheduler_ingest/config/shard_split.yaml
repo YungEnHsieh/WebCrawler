@@ -1,7 +1,21 @@
-# eTLD+1s here shard per-hostname (md5(host) % num_shards) instead of per
-# eTLD+1. The matching entry in ingest.yaml::domain_overrides is auto-stripped;
-# to preserve the inter-domain distribution, re-add an override for the
-# dominant subdomain (e.g. www.facebook.com: 192). Dry-run via
-# scripts/migrate_shard_split.py lists the top hostnames.
-split_etld1:
-  - facebook.com
+# Hostnames here get their own shard (md5(host) % num_shards). Anything else
+# under the same eTLD+1 falls back to the eTLD+1 key plus any matching
+# override in ingest.yaml::domain_overrides. Use scripts/show_subdomain_counts.py
+# to pick candidates.
+split_subdomains:
+  - developers.facebook.com
+  - research.facebook.com
+  - tech.facebook.com
+  - work.facebook.com
+  - docs.x.com
+  - business.x.com
+  - shop.x.com
+  - privacy.x.com
+  - gdpr.x.com
+  - about.x.com
+  - privacycenter.instagram.com
+  - www.business.reddit.com
+  - business.linkedin.com
+  - economicgraph.linkedin.com
+  - learning.linkedin.com
+  - shop.bbc.com

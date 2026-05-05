@@ -20,6 +20,7 @@ from libs.config.loader import load_yaml
 from libs.db.sharding.key import compute_shard, load_sharding_config
 
 INJECT_AFTER_WEEKS = 4
+MAX_URL_LEN = 2500
 INGEST_CONFIG = (
     Path(__file__).resolve().parents[1]
     / "containers/scheduler_ingest/config/ingest.yaml"
@@ -30,8 +31,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 
-def domain_to_shard(domain: str, overrides: dict[str, int], split_etld1: set[str] | None = None) -> int:
-    return compute_shard(domain, NUM_SHARDS, overrides, split_etld1)
+def domain_to_shard(domain: str, overrides: dict[str, int], split_subdomains: set[str] | None = None) -> int:
+    return compute_shard(domain, NUM_SHARDS, overrides, split_subdomains)
 
 
 def extract_domain(url: str) -> str | None:
@@ -152,7 +153,7 @@ def main():
             log.info("Nothing to inject")
             return
 
-        overrides, split_etld1 = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
+        overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
         injected = 0
         marked = 0
         failed = 0
@@ -162,6 +163,9 @@ def main():
 
         for rec in urls:
             url = rec["url"]
+            if len(url) > MAX_URL_LEN:
+                failed += 1
+                continue
             domain = extract_domain(url)
             if not domain:
                 log.warning("Cannot parse domain from URL: %s", url)
@@ -169,7 +173,7 @@ def main():
                 continue
 
             if domain not in domain_cache:
-                shard_id = domain_to_shard(domain, overrides, split_etld1)
+                shard_id = domain_to_shard(domain, overrides, split_subdomains)
                 if args.dry_run:
                     domain_cache[domain] = (0, shard_id, 0.0)
                 else:

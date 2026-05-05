@@ -86,7 +86,24 @@ Recommended rollout order:
 6. Mount the ranker artifact, then enable `GOLDEN_DISCOVERY_RANKER_V1_ENABLED=true`.
 7. After ranker progress is visible through increasing non-NULL `url_score_updated_at` rows, switch `OFFERER_STRATEGY=golden_discovery_ranker_v1`.
 
-## 6.6 `migrate_merge_subdomain_rows.py`
+## 6.6 `migrate_add_url_metadata.py`
+
+- One-time migration.
+- Adds lightweight discovery and response metadata columns to all 256 shards of `url_state_current_{shard}` and `url_state_history_{shard}` (6144 ALTERs total).
+- Columns: `last_modified TIMESTAMPTZ`, `etag VARCHAR`, `cache_control VARCHAR`, `is_redirect BOOLEAN`, `redirect_hop_count SMALLINT`, `discovery_source_type SMALLINT NOT NULL DEFAULT 0`, `parent_page_score DOUBLE PRECISION`, `inlink_count_approx INTEGER NOT NULL DEFAULT 0`, `inlink_count_external INTEGER NOT NULL DEFAULT 0`, `anchor_text VARCHAR`, `robots_bits SMALLINT NOT NULL DEFAULT 0`, `hreflang_count INTEGER`.
+- Idempotent via `IF NOT EXISTS`.
+- PG 11+ treats these as metadata-only, no table rewrite.
+- Spider records HTTP cache/redirect metadata; router tags outlink discoveries with `discovery_source_type=1`, source-page score, and external-link status; ingestor preserves previous response metadata when a refetch does not provide a value.
+- `inlink_count_approx` and `inlink_count_external` are no-dedup observed outlink counters from the time this migration is deployed; repeated observations of the same edge increment again.
+- `anchor_text` stores the first non-null outlink anchor observed for a URL; later observations only fill it if the current value is NULL.
+- `robots_bits` uses `0=unknown`, `1=crawl allowed`, `2=robots.txt disallowed`; unknown crawl failures do not overwrite an existing value.
+- `hreflang_count` stores the number of alternate hreflang links found on successful HTML fetches.
+
+```bash
+uv run scripts/migrate_add_url_metadata.py [--dry-run]
+```
+
+## 6.7 `migrate_merge_subdomain_rows.py`
 
 - One-time migration.
 - Cleans up legacy `domain_state` rows in subdomain form (e.g. `en.wikipedia.org`) left by an older `golden_inject` that used `urlparse().hostname` instead of eTLD+1.
@@ -99,7 +116,7 @@ uv run scripts/migrate_merge_subdomain_rows.py --dry-run
 uv run scripts/migrate_merge_subdomain_rows.py --execute
 ```
 
-## 6.7 `migrate_shard_split.py`
+## 6.8 `migrate_shard_split.py`
 
 - Recurring / on-demand.
 - For each eTLD+1 listed in `containers/scheduler_ingest/config/shard_split.yaml`, moves `url_state_current_{old}`, `url_state_history_{old}`, and `url_event_counter_{old}` rows to new per-hostname shards (`md5(hostname) % 256`). `domain_state` is upserted per hostname with the new `shard_id`.
@@ -112,7 +129,18 @@ uv run scripts/migrate_shard_split.py             # dry-run
 uv run scripts/migrate_shard_split.py --execute   # actually move rows
 ```
 
-## 6.8 `constants.py`
+## 6.9 `migrate_add_domain_pause.py`
+
+- One-time migration.
+- Adds `crawl_paused_until TIMESTAMPTZ` and `domain_fail_count INT NOT NULL DEFAULT 0` to `domain_state`.
+- Idempotent via `IF NOT EXISTS`.
+- PG 11+ treats this as metadata-only, no table rewrite.
+
+```bash
+uv run scripts/migrate_add_domain_pause.py [--dry-run]
+```
+
+## 6.10 `constants.py`
 
 Shared constants:
 
