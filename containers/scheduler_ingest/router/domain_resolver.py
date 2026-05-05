@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 
 class DomainResolver:
-    """Upsert domain_state with the current shard_id, return domain_id + score."""
+    """Insert missing domain_state rows, return domain_id + score."""
     def __init__(self, session: Session, cache: Optional[Dict[str, tuple[int, float]]] = None):
         self.session = session
         self.cache = cache if cache is not None else {}
@@ -18,15 +18,13 @@ class DomainResolver:
         if cached is not None:
             return cached
 
-        # 1) Upsert: refresh shard_id only when it changed, so domain_state stays
-        # aligned with the live sharding config without churning writes.
+        # 1) insert if missing; shard_id transitions are owned by
+        # migrate_shard_split.py, so the hot path doesn't need to lock to re-check.
         self.session.execute(
             text("""
                 INSERT INTO domain_state(domain, shard_id)
                 VALUES (:domain, :shard_id)
-                ON CONFLICT (domain) DO UPDATE
-                SET shard_id = EXCLUDED.shard_id
-                WHERE domain_state.shard_id IS DISTINCT FROM EXCLUDED.shard_id
+                ON CONFLICT (domain) DO NOTHING
             """),
             {"domain": domain, "shard_id": shard_id},
         )

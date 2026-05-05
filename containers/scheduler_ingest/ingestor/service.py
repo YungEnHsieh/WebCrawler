@@ -65,23 +65,31 @@ class IngestService:
                 all_recs.extend(read_jsonl(f))
                 file_cnt += 1
 
-        for i in range(0, len(all_recs), BATCH_SIZE):
-            batch = all_recs[i : i + BATCH_SIZE]
-            try:
-                results = self.db.process_batch(batch)
-                for result in results:
-                    self._accumulate_result(result, counters, domains)
-            except Exception as e:
-                logger.error(
-                    "ingest.batch_error",
-                    extra={
-                        "event": "ingest.batch_error",
-                        "error": str(e),
-                        "batch_size": len(batch),
-                    },
-                )
-                counters["error_count"] += len(batch)
-                counters["ingest_error"] += len(batch)
+        link_recs = self.db.aggregate_links(
+            [r for r in all_recs if r.get("status") == "new"]
+        )
+        result_recs = [r for r in all_recs if r.get("status") != "new"]
+
+        # Links before results: a url that appears as both discovery and crawl
+        # result needs its domain_score set before the result UPSERT runs.
+        for batch_recs in (link_recs, result_recs):
+            for i in range(0, len(batch_recs), BATCH_SIZE):
+                batch = batch_recs[i : i + BATCH_SIZE]
+                try:
+                    results = self.db.process_batch(batch)
+                    for result in results:
+                        self._accumulate_result(result, counters, domains)
+                except Exception as e:
+                    logger.error(
+                        "ingest.batch_error",
+                        extra={
+                            "event": "ingest.batch_error",
+                            "error": str(e),
+                            "batch_size": len(batch),
+                        },
+                    )
+                    counters["error_count"] += len(batch)
+                    counters["ingest_error"] += len(batch)
 
         domains.pop(None, None)
         self.stats.write(
