@@ -39,8 +39,11 @@ class UrlStateMixin:
 
     should_crawl = Column(Boolean, default=True)
 
-    # Priority signals
+    # Priority signals. The Golden Discovery Ranker v1 reuses url_score; the
+    # timestamp is only a freshness marker so production does not need
+    # score-version columns.
     url_score = Column(Float, default=0.0)
+    url_score_updated_at = Column(DateTime(timezone=True))
     domain_score = Column(Float, default=0.0)
     parent_page_score = Column(Float)
     inlink_count_approx = Column(Integer, nullable=False, server_default=text("0"))

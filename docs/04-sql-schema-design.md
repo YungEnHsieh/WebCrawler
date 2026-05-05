@@ -124,7 +124,7 @@ Key columns:
 - scheduler times: `first_seen`, `last_scheduled`, `last_fetch_ok`, `last_content_update`
 - rolling counters: `num_scheduled_90d`, `num_fetch_ok_90d`, `num_fetch_fail_90d`, `num_content_update_90d`
 - quality/failure: `num_consecutive_fail`, `last_fail_reason`, `content_hash`
-- scheduling flags/signals: `should_crawl`, `url_score`, `domain_score`
+- scheduling flags/signals: `should_crawl`, `url_score`, `url_score_updated_at`, `domain_score`
 - link signals: `inlink_count_approx INTEGER NOT NULL DEFAULT 0`, `inlink_count_external INTEGER NOT NULL DEFAULT 0` (non-deduplicated observed outlink counters from crawler discovery; no historical backfill)
 - provenance: `source SMALLINT NOT NULL DEFAULT 0` (`0` = natural discovery, `1` = golden set membership; see `scripts/golden_inject.py`)
 - provenance: `discovered_from VARCHAR` (parent page URL on first discovery; NULL for golden-injected and seed URLs; first parent wins via `ON CONFLICT DO NOTHING`)
@@ -239,6 +239,8 @@ To support current query patterns efficiently, maintain indexes such as:
 
 - `domain_state(domain)` unique (already implied)
 - `url_state_current_{shard}(should_crawl, last_scheduled, url_score, domain_score)`
+- `url_state_current_{shard}(first_seen ASC NULLS LAST) WHERE should_crawl = TRUE AND url_score_updated_at IS NULL` for Golden Discovery Ranker v1 unscored-row batches; URL text is intentionally left out of the index key to reduce write churn.
+- Golden Discovery Ranker v1 offerer indexes should be confirmed with `EXPLAIN ANALYZE` before adding more indexes; its domain aggregation can be data-shape dependent.
 - `url_state_current_{shard}(domain_id)`
 - `domain_stats_daily(event_date)`
 - `summary_daily(event_date)` primary key (already)

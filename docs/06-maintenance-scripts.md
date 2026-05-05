@@ -50,7 +50,43 @@ uv run scripts/migrate_add_discovered_from.py [--dry-run]
 uv run scripts/migrate_add_title.py [--dry-run]
 ```
 
-## 6.5 `migrate_add_url_metadata.py`
+## 6.5 `migrate_add_url_score_updated_at.py`
+
+- One-time migration.
+- Adds `url_score_updated_at TIMESTAMPTZ` (nullable, no default) to all 256 shards of `url_state_current_{shard}` and `url_state_history_{shard}`.
+- Existing rows stay NULL so the Golden Discovery Ranker v1 can refresh them into the existing `url_score` without adding score-version columns.
+- Creates one partial Golden Discovery Ranker v1 index per current shard:
+  - `idx_url_state_current_{shard}_golden_discovery_v1_unscored`
+  - `ON url_state_current_{shard}(first_seen ASC NULLS LAST)`
+  - `WHERE should_crawl = TRUE AND url_score_updated_at IS NULL`
+- The index is not a new data column. It is a PostgreSQL lookup structure for the background ranker's "find unscored crawlable URLs" query.
+- The index intentionally does not include the full URL text in its key, keeping write churn lower for high discovery volume.
+- Indexes are created with `CREATE INDEX CONCURRENTLY` after the column transaction commits. This reduces write blocking, but index creation can still take time and consume IO.
+- Runtime cost after creation: additional disk usage and a small write/update overhead on matching `url_state_current_*` rows.
+- The migration is idempotent via `IF NOT EXISTS`. If `CREATE INDEX CONCURRENTLY` is interrupted, inspect for invalid indexes before rerunning, because PostgreSQL can leave an invalid same-name index behind.
+
+```bash
+uv run scripts/migrate_add_url_score_updated_at.py [--dry-run]
+```
+
+Local smoke test against a disposable schema in a PostgreSQL database:
+
+```bash
+GOLDEN_DISCOVERY_LOCAL_DB_SMOKE_DSN='postgresql://crawler:crawler@127.0.0.1:5432/crawlerdb' \
+  python -m unittest tests.test_golden_discovery_local_db_smoke -v
+```
+
+Recommended rollout order:
+
+1. Run `uv run scripts/migrate_add_url_score_updated_at.py --dry-run`.
+2. Run the migration before deploying code that reads/writes `url_score_updated_at`.
+3. Verify all `url_state_current_*` and `url_state_history_*` shards have the column.
+4. Verify all `url_state_current_*` shards have the `*_golden_discovery_v1_unscored` index and that no invalid index remains.
+5. Deploy the image/code with `GOLDEN_DISCOVERY_RANKER_V1_ENABLED=false` first.
+6. Mount the ranker artifact, then enable `GOLDEN_DISCOVERY_RANKER_V1_ENABLED=true`.
+7. After ranker progress is visible through increasing non-NULL `url_score_updated_at` rows, switch `OFFERER_STRATEGY=golden_discovery_ranker_v1`.
+
+## 6.6 `migrate_add_url_metadata.py`
 
 - One-time migration.
 - Adds lightweight discovery and response metadata columns to all 256 shards of `url_state_current_{shard}` and `url_state_history_{shard}` (6144 ALTERs total).
@@ -67,7 +103,7 @@ uv run scripts/migrate_add_title.py [--dry-run]
 uv run scripts/migrate_add_url_metadata.py [--dry-run]
 ```
 
-## 6.6 `migrate_merge_subdomain_rows.py`
+## 6.7 `migrate_merge_subdomain_rows.py`
 
 - One-time migration.
 - Cleans up legacy `domain_state` rows in subdomain form (e.g. `en.wikipedia.org`) left by an older `golden_inject` that used `urlparse().hostname` instead of eTLD+1.
@@ -80,7 +116,7 @@ uv run scripts/migrate_merge_subdomain_rows.py --dry-run
 uv run scripts/migrate_merge_subdomain_rows.py --execute
 ```
 
-## 6.7 `migrate_shard_split.py`
+## 6.8 `migrate_shard_split.py`
 
 - Recurring / on-demand.
 - For each eTLD+1 listed in `containers/scheduler_ingest/config/shard_split.yaml`, moves `url_state_current_{old}`, `url_state_history_{old}`, and `url_event_counter_{old}` rows to new per-hostname shards (`md5(hostname) % 256`). `domain_state` is upserted per hostname with the new `shard_id`.
@@ -93,7 +129,7 @@ uv run scripts/migrate_shard_split.py             # dry-run
 uv run scripts/migrate_shard_split.py --execute   # actually move rows
 ```
 
-## 6.8 `migrate_add_domain_pause.py`
+## 6.9 `migrate_add_domain_pause.py`
 
 - One-time migration.
 - Adds `crawl_paused_until TIMESTAMPTZ` and `domain_fail_count INT NOT NULL DEFAULT 0` to `domain_state`.
@@ -104,7 +140,7 @@ uv run scripts/migrate_shard_split.py --execute   # actually move rows
 uv run scripts/migrate_add_domain_pause.py [--dry-run]
 ```
 
-## 6.9 `constants.py`
+## 6.10 `constants.py`
 
 Shared constants:
 
