@@ -457,6 +457,29 @@ class IngestDB:
         results.extend(dup_results)
         return results
 
+    @staticmethod
+    def aggregate_links(recs: list[dict]) -> list[dict]:
+        """Collapse discovery records by url: sum inlink counters, keep first
+        non-null anchor. _bulk_links only dedups within one BATCH_SIZE chunk;
+        folder-level dedup is what actually cuts the ~12x hot-url contention.
+        """
+        by_url: dict[str, dict] = {}
+        for rec in recs:
+            url = rec.get("url")
+            if not url:
+                continue
+            inc_a = int(rec.get("inlink_count_approx", 1))
+            inc_e = int(rec.get("inlink_count_external", 0))
+            existing = by_url.get(url)
+            if existing is None:
+                by_url[url] = {**rec, "inlink_count_approx": inc_a, "inlink_count_external": inc_e}
+            else:
+                existing["inlink_count_approx"] += inc_a
+                existing["inlink_count_external"] += inc_e
+                if not existing.get("anchor_text") and rec.get("anchor_text"):
+                    existing["anchor_text"] = rec["anchor_text"]
+        return list(by_url.values())
+
     def process_batch(self, recs: list[dict]) -> list[IngestResult | bool | None]:
         """Group records by (kind, shard_id) and dispatch to bulk paths.
 
