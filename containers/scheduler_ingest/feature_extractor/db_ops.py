@@ -8,6 +8,10 @@ from sqlalchemy import text, insert
 from sqlalchemy.orm import sessionmaker
 
 
+# Catches already-queued oversized urls that bypassed the spider-side filter.
+MAX_URL_LEN = 2500
+
+
 class FeatureDB:
     """
     Updates:
@@ -25,6 +29,8 @@ class FeatureDB:
 
     def process(self, rec: dict) -> None:
         url = rec["url"]
+        if len(url) > MAX_URL_LEN:
+            return
         shard_id = rec["shard_id"]
         domain_id = rec["domain_id"]
         fetched_at = rec["fetched_at"]
