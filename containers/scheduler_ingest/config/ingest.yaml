@@ -10,7 +10,7 @@ router:
 
   # Pin top-traffic domains 32 apart so each lands on a distinct ingestor.
   # eTLD+1 overrides are also the fallback shard for non-whitelisted
-  # subdomains (whitelist lives in shard_split.yaml).
+  # subdomains (whitelist lives in DB table shard_split_subdomain).
   domain_overrides:
     wikipedia.org: 0
     x.com: 32

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Move url_state rows for hostnames listed in shard_split.yaml::split_subdomains
-out to their own per-host shards. Migrates url_state_current / history /
+Move url_state rows for hostnames listed in the shard_split_subdomain
+table out to their own per-host shards. Migrates url_state_current / history /
 url_event_counter; content_feature_* and domain_stats_daily start fresh.
 
 --execute requires scheduler_ingest to be paused.
@@ -32,7 +32,6 @@ def parents_of(hosts: set[str]) -> set[str]:
     return parents
 
 REPO = Path(__file__).resolve().parents[1]
-SPLIT_CFG = REPO / "containers/scheduler_ingest/config/shard_split.yaml"
 INGEST_CFG = REPO / "containers/scheduler_ingest/config/ingest.yaml"
 
 HOST_EXTRACT = "LOWER(SUBSTRING(url FROM '^https?://([^/:]+)'))"
@@ -303,21 +302,21 @@ def main() -> None:
                    help="Actually move rows. Requires pipeline pause beforehand.")
     args = p.parse_args()
 
-    overrides, split_subdomains = load_sharding_config(INGEST_CFG, SPLIT_CFG)
-    if not split_subdomains:
-        print(f"no whitelist entries. edit {SPLIT_CFG}.")
-        return
-    targets = sorted(parents_of(split_subdomains))
-
-    num_shards = load_num_shards()
-    mode = "DRY-RUN" if args.dry_run else "EXECUTE"
-    print(f"mode: {mode}")
-    print(f"split_subdomains: {sorted(split_subdomains)}")
-    print(f"parents: {targets}")
-    print(f"overrides: {overrides}")
-    print(f"num_shards: {num_shards}")
-
     with psycopg2.connect(**CRAWLERDB) as conn:
+        overrides, split_subdomains = load_sharding_config(INGEST_CFG, conn)
+        if not split_subdomains:
+            print("no whitelist entries in shard_split_subdomain.")
+            return
+        targets = sorted(parents_of(split_subdomains))
+
+        num_shards = load_num_shards()
+        mode = "DRY-RUN" if args.dry_run else "EXECUTE"
+        print(f"mode: {mode}")
+        print(f"split_subdomains: {sorted(split_subdomains)}")
+        print(f"parents: {targets}")
+        print(f"overrides: {overrides}")
+        print(f"num_shards: {num_shards}")
+
         with conn.cursor() as cur:
             for etld1 in targets:
                 if args.dry_run:
