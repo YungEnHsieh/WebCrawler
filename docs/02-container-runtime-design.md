@@ -20,10 +20,11 @@ Primary role:
 
 ## 2.2 `scheduler_control` Container
 
-Runs `supervisord` with two program types:
+Runs `supervisord` with three program types:
 
 - `offerer` with `numprocs=16` (`offerer_00..offerer_15`)
 - `accounting_rolloff` with `numprocs=1`
+- `golden_discovery_ranker_v1` with `numprocs=4` (disabled unless `GOLDEN_DISCOVERY_RANKER_V1_ENABLED=true`)
 
 Runtime behavior per offerer:
 
@@ -31,6 +32,7 @@ Runtime behavior per offerer:
 2. If below `low_watermark_batches`, query its 16 assigned shards in DB.
 3. Select URLs where `should_crawl=TRUE` using strategy ordering:
    - Phase A: score-aware (`url_score`, `domain_score`, `last_scheduled`, `first_seen`)
+   - Golden Discovery Ranker v1 mode (`OFFERER_STRATEGY=golden_discovery_ranker_v1`): prefer rows with refreshed `url_score_updated_at`, then highest `url_score`
    - Phase B: fairness (`last_scheduled`, `first_seen`)
 4. Atomically update selected rows:
    - `should_crawl=FALSE`
@@ -52,6 +54,13 @@ Runtime behavior of `accounting_rolloff`:
    - append snapshots into `url_state_history_{shard}`,
    - set processed (and missing-current-row) event rows to `accounted=FALSE`.
 4. Commit each batch independently to reduce lock duration and avoid long transactions.
+
+Runtime behavior of `golden_discovery_ranker_v1`:
+
+1. Loads a mounted Golden Discovery Ranker artifact when `GOLDEN_DISCOVERY_RANKER_V1_ENABLED=true`.
+2. Finds crawlable URLs where `url_score_updated_at IS NULL`.
+3. Scores those URLs with the artifact heads and writes the combined ranker score into the existing `url_score`.
+4. Sets `url_score_updated_at=NOW()` as the only completion marker; it does not append experiment logs or score-history rows.
 
 ## 2.3 `crawler` Container
 

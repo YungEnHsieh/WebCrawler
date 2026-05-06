@@ -10,9 +10,10 @@ PG 11+ handles ADD COLUMN without a DEFAULT as metadata-only,
 so this does not rewrite table data.
 
 The ranker then repeatedly finds crawlable rows whose timestamp is still NULL.
-Each current-shard table gets a partial index for that lookup. Indexes are
-created concurrently after the column transaction commits, because PostgreSQL
-does not allow CREATE INDEX CONCURRENTLY inside a transaction block.
+Each current-shard table gets partial indexes for the background scorer lookup
+and the Golden Discovery offerer selection path. Indexes are created
+concurrently after the column transaction commits, because PostgreSQL does not
+allow CREATE INDEX CONCURRENTLY inside a transaction block.
 
 Usage:
     uv run scripts/migrate_add_url_score_updated_at.py [--dry-run]
@@ -53,6 +54,10 @@ def golden_discovery_unscored_index_name(shard_id: int) -> str:
     return f"idx_url_state_current_{shard_id:03d}_golden_discovery_v1_unscored"
 
 
+def golden_discovery_selection_index_name(shard_id: int) -> str:
+    return f"idx_url_state_current_{shard_id:03d}_golden_discovery_v1_selection"
+
+
 def create_golden_discovery_unscored_index_sql(shard_id: int) -> str:
     table = f"{CURRENT_PREFIX}_{shard_id:03d}"
     return (
@@ -60,6 +65,22 @@ def create_golden_discovery_unscored_index_sql(shard_id: int) -> str:
         f"{golden_discovery_unscored_index_name(shard_id)} "
         f"ON {table} (first_seen ASC NULLS LAST) "
         "WHERE should_crawl = TRUE AND url_score_updated_at IS NULL"
+    )
+
+
+def create_golden_discovery_selection_index_sql(shard_id: int) -> str:
+    table = f"{CURRENT_PREFIX}_{shard_id:03d}"
+    return (
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+        f"{golden_discovery_selection_index_name(shard_id)} "
+        f"ON {table} ("
+        "domain_id, "
+        "((CASE WHEN url_score_updated_at IS NULL THEN 1 ELSE 0 END)), "
+        "url_score DESC NULLS LAST, "
+        "domain_score DESC NULLS LAST, "
+        "last_scheduled ASC NULLS FIRST, "
+        "first_seen ASC"
+        ") WHERE should_crawl = TRUE"
     )
 
 
@@ -89,12 +110,15 @@ def create_golden_discovery_indexes(conn, dry_run: bool) -> int:
     try:
         with conn.cursor() as cur:
             for shard_id in range(NUM_SHARDS):
-                sql = create_golden_discovery_unscored_index_sql(shard_id)
-                count += 1
-                if dry_run:
-                    log.info("[DRY-RUN] %s", sql)
-                else:
-                    cur.execute(sql)
+                for sql in (
+                    create_golden_discovery_unscored_index_sql(shard_id),
+                    create_golden_discovery_selection_index_sql(shard_id),
+                ):
+                    count += 1
+                    if dry_run:
+                        log.info("[DRY-RUN] %s", sql)
+                    else:
+                        cur.execute(sql)
     finally:
         if not dry_run:
             conn.autocommit = previous_autocommit
