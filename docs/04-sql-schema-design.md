@@ -240,7 +240,7 @@ To support current query patterns efficiently, maintain indexes such as:
 - `domain_state(domain)` unique (already implied)
 - `url_state_current_{shard}(should_crawl, last_scheduled, url_score, domain_score)`
 - `url_state_current_{shard}(first_seen ASC NULLS LAST) WHERE should_crawl = TRUE AND url_score_updated_at IS NULL` for Golden Discovery Ranker v1 unscored-row batches; URL text is intentionally left out of the index key to reduce write churn.
-- Golden Discovery Ranker v1 offerer indexes should be confirmed with `EXPLAIN ANALYZE` before adding more indexes; its domain aggregation can be data-shape dependent.
+- `url_state_current_{shard}(domain_id, score-refresh flag, url_score DESC, domain_score DESC, last_scheduled ASC, first_seen ASC) WHERE should_crawl = TRUE` for Golden Discovery Ranker v1 per-domain selection.
 - `url_state_current_{shard}(domain_id)`
 - `domain_stats_daily(event_date)`
 - `summary_daily(event_date)` primary key (already)

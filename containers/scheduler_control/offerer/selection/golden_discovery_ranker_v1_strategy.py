@@ -59,12 +59,13 @@ class GoldenDiscoveryRankerV1Strategy(SelectionStrategy):
             FROM {table}
             WHERE should_crawl = TRUE
               {exclude_clause}
+              AND NOT EXISTS (
+                SELECT 1 FROM domain_state d
+                WHERE d.domain_id = {table}.domain_id
+                  AND d.crawl_paused_until > NOW()
+              )
             GROUP BY domain_id
             ORDER BY
-                CASE
-                    WHEN MAX(CASE WHEN url_score_updated_at IS NOT NULL THEN url_score END) IS NULL THEN 1
-                    ELSE 0
-                END,
                 best_golden_discovery_score DESC NULLS LAST,
                 best_any_score DESC NULLS LAST,
                 best_domain_score DESC NULLS LAST,

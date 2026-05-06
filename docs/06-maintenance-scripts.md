@@ -55,12 +55,15 @@ uv run scripts/migrate_add_title.py [--dry-run]
 - One-time migration.
 - Adds `url_score_updated_at TIMESTAMPTZ` (nullable, no default) to all 256 shards of `url_state_current_{shard}` and `url_state_history_{shard}`.
 - Existing rows stay NULL so the Golden Discovery Ranker v1 can refresh them into the existing `url_score` without adding score-version columns.
-- Creates one partial Golden Discovery Ranker v1 index per current shard:
+- Creates two partial Golden Discovery Ranker v1 indexes per current shard:
   - `idx_url_state_current_{shard}_golden_discovery_v1_unscored`
   - `ON url_state_current_{shard}(first_seen ASC NULLS LAST)`
   - `WHERE should_crawl = TRUE AND url_score_updated_at IS NULL`
-- The index is not a new data column. It is a PostgreSQL lookup structure for the background ranker's "find unscored crawlable URLs" query.
-- The index intentionally does not include the full URL text in its key, keeping write churn lower for high discovery volume.
+  - `idx_url_state_current_{shard}_golden_discovery_v1_selection`
+  - `ON url_state_current_{shard}(domain_id, score-refresh flag, url_score DESC, domain_score DESC, last_scheduled ASC, first_seen ASC)`
+  - `WHERE should_crawl = TRUE`
+- These indexes are not new data columns. They are PostgreSQL lookup structures for the background ranker's "find unscored crawlable URLs" query and the Golden Discovery offerer's per-domain selection query.
+- The indexes intentionally do not include the full URL text in their keys, keeping write churn lower for high discovery volume.
 - Indexes are created with `CREATE INDEX CONCURRENTLY` after the column transaction commits. This reduces write blocking, but index creation can still take time and consume IO.
 - Runtime cost after creation: additional disk usage and a small write/update overhead on matching `url_state_current_*` rows.
 - The migration is idempotent via `IF NOT EXISTS`. If `CREATE INDEX CONCURRENTLY` is interrupted, inspect for invalid indexes before rerunning, because PostgreSQL can leave an invalid same-name index behind.

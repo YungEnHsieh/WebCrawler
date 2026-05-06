@@ -71,6 +71,7 @@ class GoldenDiscoveryLocalDBSmokeTest(unittest.TestCase):
             with conn.cursor() as cur:
                 cur.execute(f"SET search_path TO {schema}")
                 cur.execute(migration.create_golden_discovery_unscored_index_sql(0))
+                cur.execute(migration.create_golden_discovery_selection_index_sql(0))
                 cur.execute(
                     """
                     INSERT INTO url_state_current_000
@@ -94,6 +95,20 @@ class GoldenDiscoveryLocalDBSmokeTest(unittest.TestCase):
                 self.assertIn("WHERE ((should_crawl = true)", indexdef)
                 self.assertIn("(url_score_updated_at IS NULL)", indexdef)
 
+                cur.execute(
+                    """
+                    SELECT indexdef
+                    FROM pg_indexes
+                    WHERE schemaname = %s
+                      AND indexname = %s
+                    """,
+                    (schema, migration.golden_discovery_selection_index_name(0)),
+                )
+                selection_indexdef = cur.fetchone()[0]
+                self.assertIn("domain_id", selection_indexdef)
+                self.assertIn("url_score DESC NULLS LAST", selection_indexdef)
+                self.assertIn("WHERE (should_crawl = true)", selection_indexdef)
+
                 cur.execute("SET enable_seqscan = off")
                 cur.execute(
                     """
@@ -109,6 +124,26 @@ class GoldenDiscoveryLocalDBSmokeTest(unittest.TestCase):
                 )
                 plan = "\n".join(row[0] for row in cur.fetchall())
                 self.assertIn(migration.golden_discovery_unscored_index_name(0), plan)
+
+                cur.execute(
+                    """
+                    EXPLAIN
+                    SELECT url, domain_id
+                    FROM url_state_current_000
+                    WHERE should_crawl = TRUE
+                      AND domain_id = 1
+                    ORDER BY
+                        CASE WHEN url_score_updated_at IS NULL THEN 1 ELSE 0 END,
+                        url_score DESC NULLS LAST,
+                        domain_score DESC NULLS LAST,
+                        last_scheduled ASC NULLS FIRST,
+                        first_seen ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 2
+                    """
+                )
+                selection_plan = "\n".join(row[0] for row in cur.fetchall())
+                self.assertIn(migration.golden_discovery_selection_index_name(0), selection_plan)
 
             engine = create_engine(
                 _sqlalchemy_url(dsn),

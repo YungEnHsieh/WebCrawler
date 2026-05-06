@@ -34,6 +34,26 @@ class GoldenDiscoveryMigrationSqlTest(unittest.TestCase):
         )
         self.assertNotIn("url_state_history", sql)
 
+    def test_selection_index_is_partial_current_shard_index(self):
+        sql = migration.create_golden_discovery_selection_index_sql(7)
+
+        self.assertIn(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+            "idx_url_state_current_007_golden_discovery_v1_selection",
+            sql,
+        )
+        self.assertIn(
+            "ON url_state_current_007 (domain_id, "
+            "((CASE WHEN url_score_updated_at IS NULL THEN 1 ELSE 0 END)), "
+            "url_score DESC NULLS LAST, "
+            "domain_score DESC NULLS LAST, "
+            "last_scheduled ASC NULLS FIRST, "
+            "first_seen ASC)",
+            sql,
+        )
+        self.assertIn("WHERE should_crawl = TRUE", sql)
+        self.assertNotIn("url_state_history", sql)
+
     def test_column_migration_targets_current_and_history_shards(self):
         tables = list(migration.iter_state_tables(num_shards=2))
 
@@ -106,6 +126,10 @@ class GoldenDiscoveryOffererStrategyTest(unittest.TestCase):
             "MAX(CASE WHEN url_score_updated_at IS NOT NULL THEN url_score END)",
             sql,
         )
+        self.assertNotIn("WHEN MAX(CASE", sql)
+        self.assertIn("NOT EXISTS", sql)
+        self.assertIn("FROM domain_state d", sql)
+        self.assertIn("d.crawl_paused_until > NOW()", sql)
         self.assertIn(
             "CASE WHEN url_score_updated_at IS NULL THEN 1 ELSE 0 END",
             sql,
