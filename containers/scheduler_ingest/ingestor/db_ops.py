@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from psycopg2.extras import execute_values
 from sqlalchemy.orm import sessionmaker
 
+from libs.scoring.golden_discovery_runtime import GoldenDiscoveryRuntimeScorer
+
 
 @dataclass
 class IngestResult:
@@ -114,8 +116,13 @@ _HIST_COLS = (
 
 
 class IngestDB:
-    def __init__(self, Session: sessionmaker):
+    def __init__(
+        self,
+        Session: sessionmaker,
+        inline_ranker: GoldenDiscoveryRuntimeScorer | None = None,
+    ):
         self.Session = Session
+        self.inline_ranker = inline_ranker
 
     def _tcur(self, shard_id: int) -> str:
         return f"url_state_current_{shard_id:03d}"
@@ -125,6 +132,18 @@ class IngestDB:
 
     def _tevt(self, shard_id: int) -> str:
         return f"url_event_counter_{shard_id:03d}"
+
+    def _score_new_links(self, urls: list[str]) -> tuple[list[float], datetime | None]:
+        if not urls:
+            return [], None
+        if self.inline_ranker is None:
+            return [0.0 for _ in urls], None
+        scores = [float(score) for score in self.inline_ranker.score_many(urls)]
+        if len(scores) != len(urls):
+            raise RuntimeError(
+                f"inline ranker returned {len(scores)} scores for {len(urls)} URLs"
+            )
+        return scores, datetime.now(timezone.utc)
 
     @staticmethod
     def _parse_optional_datetime(value: str | None) -> datetime | None:
@@ -409,25 +428,31 @@ class IngestDB:
 
         unique_items = [(first_idx_by_url[url], rec) for url, rec in by_url.items()]
 
-        link_rows = [
-            (
-                rec["url"],
-                int(rec["domain_id"]),
-                float(rec.get("domain_score", 0.0)),
-                rec.get("discovered_from"),
-                int(rec.get("discovery_source_type", 0)),
-                rec.get("parent_page_score"),
-                int(rec.get("inlink_count_approx", 0)),
-                int(rec.get("inlink_count_external", 0)),
-                (rec.get("anchor_text") or None),
+        score_urls = [rec["url"] for _, rec in unique_items]
+        scores, score_updated_at = self._score_new_links(score_urls)
+
+        link_rows = []
+        for (_, rec), url_score in zip(unique_items, scores):
+            link_rows.append(
+                (
+                    rec["url"],
+                    int(rec["domain_id"]),
+                    float(rec.get("domain_score", 0.0)),
+                    float(url_score),
+                    score_updated_at,
+                    rec.get("discovered_from"),
+                    int(rec.get("discovery_source_type", 0)),
+                    rec.get("parent_page_score"),
+                    int(rec.get("inlink_count_approx", 0)),
+                    int(rec.get("inlink_count_external", 0)),
+                    (rec.get("anchor_text") or None),
+                )
             )
-            for _, rec in unique_items
-        ]
         inserted_rows = execute_values(
             cur,
             f"""
             INSERT INTO {tcur}
-              (url, domain_id, domain_score, discovered_from,
+              (url, domain_id, domain_score, url_score, url_score_updated_at, discovered_from,
                discovery_source_type, parent_page_score,
                inlink_count_approx, inlink_count_external, anchor_text)
             VALUES %s
@@ -449,7 +474,7 @@ class IngestDB:
                 cur,
                 f"""
                 INSERT INTO {this}
-                  (url, domain_id, domain_score, discovered_from,
+                  (url, domain_id, domain_score, url_score, url_score_updated_at, discovered_from,
                    discovery_source_type, parent_page_score,
                    inlink_count_approx, inlink_count_external, anchor_text)
                 VALUES %s

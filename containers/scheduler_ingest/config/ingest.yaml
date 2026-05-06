@@ -40,3 +40,9 @@ stats:
 postgres:
   dsn: "postgresql+psycopg2://crawler:crawler@172.16.191.1:5432/crawlerdb"
 
+golden_discovery_ranker_v1:
+  # Optional inline scoring for newly discovered URLs. Keep disabled until the
+  # artifact is mounted in scheduler_ingest; the background ranker can still
+  # score rows later when this is false.
+  ingest_inline_enabled: false
+  artifact_path: "/app/artifacts/golden_discovery_ranker_v1.joblib"

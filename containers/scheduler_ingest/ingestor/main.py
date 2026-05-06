@@ -1,16 +1,67 @@
 from __future__ import annotations
 import time
 import argparse
+import logging
+import os
+from pathlib import Path
+from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from libs.config.loader import load_yaml, require
 from libs.ipc.folder_reader import Progress, FolderReader
 from libs.obslog import configure as configure_logging
+from libs.scoring.golden_discovery_runtime import GoldenDiscoveryRuntimeScorer
 from libs.stats.delta_writer import StatsDeltaWriter
 
 from .service import IngestService
 from .db_ops import IngestDB
+
+
+LOGGER = logging.getLogger("ingestor")
+RANKER_ENV_PREFIX = "GOLDEN_DISCOVERY_RANKER_V1"
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_str(name: str, default: str) -> str:
+    value = os.environ.get(name)
+    return value if value not in (None, "") else default
+
+
+def _load_inline_ranker(raw: dict[str, Any]) -> GoldenDiscoveryRuntimeScorer | None:
+    ranker_raw: dict[str, Any] = dict(raw.get("golden_discovery_ranker_v1") or {})
+    enabled = _env_bool(
+        f"{RANKER_ENV_PREFIX}_INGEST_INLINE_ENABLED",
+        bool(ranker_raw.get("ingest_inline_enabled", False)),
+    )
+    if not enabled:
+        return None
+
+    artifact_path = _env_str(
+        f"{RANKER_ENV_PREFIX}_ARTIFACT",
+        str(ranker_raw.get("artifact_path", "")),
+    )
+    if not artifact_path or not Path(artifact_path).exists():
+        raise SystemExit(f"Golden Discovery Ranker artifact not found: {artifact_path!r}")
+
+    ranker = GoldenDiscoveryRuntimeScorer.load(artifact_path)
+    LOGGER.info(
+        "golden_discovery_ranker_v1.ingest_inline_loaded",
+        extra={
+            "event": "golden_discovery_ranker_v1.ingest_inline_loaded",
+            "artifact_path": artifact_path,
+            "heads": ",".join(ranker.heads),
+            "model_name": ranker.metadata.get("model_name"),
+            "score_version": ranker.metadata.get("score_version"),
+        },
+    )
+    return ranker
 
 
 def main():
@@ -51,7 +102,7 @@ def main():
     )
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-    db = IngestDB(Session)
+    db = IngestDB(Session, inline_ranker=_load_inline_ranker(raw))
     stats_dir=require(ingestor, "stats_dir")
     svc = IngestService(ingestor_id, db, StatsDeltaWriter(stats_dir))
 
@@ -67,4 +118,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
