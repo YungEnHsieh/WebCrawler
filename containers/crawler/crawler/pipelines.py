@@ -63,6 +63,7 @@ class JsonPipeline:
             "outlinks": item.get("outlinks", []),
             "title": item.get("title"),
             "hreflang_count": item.get("hreflang_count"),
+            "has_json_ld": item.get("has_json_ld"),
             "last_modified": item.get("last_modified"),
             "etag": item.get("etag"),
             "cache_control": item.get("cache_control"),
