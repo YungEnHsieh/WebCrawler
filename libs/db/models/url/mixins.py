@@ -57,6 +57,7 @@ class UrlStateMixin:
     # Page metadata: <title> trimmed to 500 chars, NULL on fail / non-HTML.
     title = Column(String)
     hreflang_count = Column(Integer)
+    has_json_ld = Column(Boolean)
 
     # HTTP response metadata used by recrawl scheduling.
     last_modified = Column(DateTime(timezone=True))

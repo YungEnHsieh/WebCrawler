@@ -13,3 +13,5 @@ class PageItem(scrapy.Item):
     is_redirect = scrapy.Field() # whether Scrapy followed a redirect for this response
     redirect_hop_count = scrapy.Field() # number of redirect hops before final response
     hreflang_count = scrapy.Field() # number of alternate hreflang links in HTML
+    has_json_ld = scrapy.Field() # bool, page has >=1 <script type="application/ld+json">
+

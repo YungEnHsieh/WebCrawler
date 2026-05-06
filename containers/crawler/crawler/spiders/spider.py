@@ -288,6 +288,7 @@ class HtmlSpider(scrapy.Spider):
                 outlinks=[],
                 title=None,
                 hreflang_count=0,
+                has_json_ld=False,
                 **self._response_metadata(response),
             )
             return
@@ -310,6 +311,7 @@ class HtmlSpider(scrapy.Spider):
         hreflang_count = len(response.xpath(
             "//link[contains(concat(' ', normalize-space(@rel), ' '), ' alternate ') and @hreflang]"
         ))
+        has_json_ld = bool(response.xpath('//script[@type="application/ld+json"]'))
 
         self._finish_owned_request(reason="parse", domain_id=track_domain_id)
         yield PageItem(
@@ -320,6 +322,7 @@ class HtmlSpider(scrapy.Spider):
             outlinks=outlinks,
             title=title,
             hreflang_count=hreflang_count,
+            has_json_ld=has_json_ld,
             **self._response_metadata(response),
         )
 
@@ -338,6 +341,7 @@ class HtmlSpider(scrapy.Spider):
             outlinks=[],
             title=None,
             hreflang_count=0,
+            has_json_ld=False,
             last_modified=None,
             etag=None,
             cache_control=None,

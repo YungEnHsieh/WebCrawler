@@ -157,6 +157,7 @@ class RouterService:
                             "content_hash": content_hash,
                             "title": rec.get("title"),
                             "hreflang_count": rec.get("hreflang_count"),
+                            "has_json_ld": rec.get("has_json_ld"),
                             "last_modified": rec.get("last_modified"),
                             "etag": rec.get("etag"),
                             "cache_control": rec.get("cache_control"),
