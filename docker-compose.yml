@@ -63,6 +63,9 @@ services:
     volumes:
       - ./:/app
       - /data/ipc:/data/ipc
+    environment:
+      - GOLDEN_DISCOVERY_RANKER_V1_ENABLED=true
+      - OFFERER_STRATEGY=golden_discovery_ranker_v1
     logging: *loki-logging
 
   scheduler_ingest:
