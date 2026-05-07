@@ -15,9 +15,12 @@ RUN pip install --no-cache-dir \
     pyyaml==6.0.2 \
     sqlalchemy==2.0.44 \
     psycopg2-binary==2.9.11 \
-    python-json-logger==2.0.7
+    python-json-logger==2.0.7 \
+    joblib==1.5.3 \
+    numpy==2.1.2 \
+    scipy==1.17.0 \
+    scikit-learn==1.8.0
 
 COPY containers/scheduler_ingest/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
-

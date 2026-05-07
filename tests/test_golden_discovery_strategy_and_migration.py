@@ -12,6 +12,8 @@ from containers.scheduler_control.scorer.service import (
     GoldenDiscoveryRankerConfig,
     GoldenDiscoveryRankerService,
 )
+from containers.scheduler_ingest.ingestor import db_ops as ingest_db_ops
+from containers.scheduler_ingest.ingestor.db_ops import IngestDB
 from scripts import migrate_add_url_score_updated_at as migration
 
 
@@ -254,6 +256,95 @@ class GoldenDiscoveryRankerServiceTest(unittest.TestCase):
             ],
         )
         self.assertEqual(page_size, 2)
+
+
+class _FakeInlineRanker:
+    def score_many(self, urls):
+        self.urls = urls
+        return [0.42 + i / 100 for i, _ in enumerate(urls)]
+
+
+class GoldenDiscoveryIngestInlineScoringTest(unittest.TestCase):
+    def test_new_links_are_inserted_with_inline_ranker_scores_when_enabled(self):
+        ranker = _FakeInlineRanker()
+        db = IngestDB(Session=None, inline_ranker=ranker)
+        execute_values_calls = []
+
+        records = [
+            (
+                0,
+                {
+                    "url": "https://example.com/a",
+                    "domain_id": 7,
+                    "domain_score": 0.1,
+                    "discovered_from": "https://example.com/",
+                },
+            ),
+            (
+                1,
+                {
+                    "url": "https://example.com/b",
+                    "domain_id": 7,
+                    "domain_score": 0.1,
+                    "discovered_from": "https://example.com/",
+                },
+            ),
+        ]
+
+        def fake_execute_values(cur, sql, rows, page_size, fetch=False):
+            materialized_rows = list(rows)
+            execute_values_calls.append((sql, materialized_rows, page_size, fetch))
+            if fetch:
+                return [(row[0], True) for row in materialized_rows]
+            return None
+
+        with patch.object(ingest_db_ops, "execute_values", fake_execute_values):
+            result = db._bulk_links(cur=object(), shard_id=3, items=records)
+
+        self.assertEqual(result, [(0, True), (1, True)])
+        self.assertEqual(ranker.urls, ["https://example.com/a", "https://example.com/b"])
+
+        current_sql, current_rows, _, current_fetch = execute_values_calls[0]
+        self.assertTrue(current_fetch)
+        self.assertIn("url_score, url_score_updated_at", current_sql)
+        self.assertEqual(current_rows[0][3], 0.42)
+        self.assertEqual(current_rows[1][3], 0.43)
+        self.assertIsNotNone(current_rows[0][4])
+        self.assertIs(current_rows[0][4], current_rows[1][4])
+
+        history_sql, history_rows, _, history_fetch = execute_values_calls[1]
+        self.assertFalse(history_fetch)
+        self.assertIn("url_score, url_score_updated_at", history_sql)
+        self.assertEqual(history_rows, current_rows)
+
+    def test_new_links_remain_unscored_when_inline_ranker_is_disabled(self):
+        db = IngestDB(Session=None, inline_ranker=None)
+        execute_values_calls = []
+        records = [
+            (
+                0,
+                {
+                    "url": "https://example.com/a",
+                    "domain_id": 7,
+                    "domain_score": 0.1,
+                },
+            )
+        ]
+
+        def fake_execute_values(cur, sql, rows, page_size, fetch=False):
+            materialized_rows = list(rows)
+            execute_values_calls.append((sql, materialized_rows, page_size, fetch))
+            if fetch:
+                return [(row[0], True) for row in materialized_rows]
+            return None
+
+        with patch.object(ingest_db_ops, "execute_values", fake_execute_values):
+            result = db._bulk_links(cur=object(), shard_id=3, items=records)
+
+        self.assertEqual(result, [(0, True)])
+        current_rows = execute_values_calls[0][1]
+        self.assertEqual(current_rows[0][3], 0.0)
+        self.assertIsNone(current_rows[0][4])
 
 
 if __name__ == "__main__":
