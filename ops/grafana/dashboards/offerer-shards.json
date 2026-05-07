@@ -1,0 +1,221 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "URLs consumed by offerer refill per shard. This is the primary cross-shard fairness view: lines should rotate over time instead of repeatedly favoring the lowest shard IDs.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "legend": {"calcs": ["sum", "lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (shard_id) (sum_over_time({service=\"offerer\", worker_id=~\"$offerer_id\", event=\"offer.refill_shard\"} | json | unwrap picked_urls [$__interval]))",
+          "legendFormat": "shard_{{shard_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Scheduled URLs per shard",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "Number of refill cycles that visited each shard. If rotation is healthy, visited counts should stay close across an offerer's assigned shard range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 10},
+      "id": 2,
+      "options": {
+        "legend": {"calcs": ["sum", "lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (shard_id) (count_over_time({service=\"offerer\", worker_id=~\"$offerer_id\", event=\"offer.refill_shard\"} | json [$__interval]))",
+          "legendFormat": "shard_{{shard_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Refill visits per shard",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "Domains consumed by offerer refill per shard. This complements URL count when per-domain URL caps vary or some domains produce smaller batches.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 10},
+      "id": 3,
+      "options": {
+        "legend": {"calcs": ["sum", "lastNotNull"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (shard_id) (sum_over_time({service=\"offerer\", worker_id=~\"$offerer_id\", event=\"offer.refill_shard\"} | json | unwrap picked_domains [$__interval]))",
+          "legendFormat": "shard_{{shard_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Scheduled domains per shard",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "description": "Total shard consumption in the dashboard time range, sorted from most consumed to least consumed. Use this to spot skew after a rollout.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 11, "w": 24, "x": 0, "y": 19},
+      "id": 4,
+      "options": {
+        "showHeader": true,
+        "sortBy": [{"desc": true, "displayName": "scheduled_urls"}]
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (shard_id) (sum_over_time({service=\"offerer\", worker_id=~\"$offerer_id\", event=\"offer.refill_shard\"} | json | unwrap picked_urls [$__range]))",
+          "instant": true,
+          "legendFormat": "shard_{{shard_id}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (shard_id) (sum_over_time({service=\"offerer\", worker_id=~\"$offerer_id\", event=\"offer.refill_shard\"} | json | unwrap picked_domains [$__range]))",
+          "instant": true,
+          "legendFormat": "shard_{{shard_id}}",
+          "refId": "B"
+        },
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (shard_id) (count_over_time({service=\"offerer\", worker_id=~\"$offerer_id\", event=\"offer.refill_shard\"} | json [$__range]))",
+          "instant": true,
+          "legendFormat": "shard_{{shard_id}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Shard consumption summary",
+      "transformations": [
+        {"id": "labelsToFields", "options": {"mode": "columns"}},
+        {"id": "joinByField", "options": {"byField": "shard_id", "mode": "outer"}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "Time 1": true, "Time 2": true, "Time 3": true},
+            "indexByName": {"shard_id": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3},
+            "renameByName": {"Value #A": "scheduled_urls", "Value #B": "scheduled_domains", "Value #C": "refill_visits"}
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["offerer", "shards", "loki"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": false, "text": "All", "value": "$__all"},
+        "datasource": {"type": "loki", "uid": "loki"},
+        "definition": "label_values({service=\"offerer\"}, worker_id)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "offerer_id",
+        "multi": true,
+        "name": "offerer_id",
+        "options": [],
+        "query": {
+          "label": "worker_id",
+          "stream": "{service=\"offerer\"}",
+          "type": 1
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "Offerer Shards — Consumption (Loki)",
+  "uid": "offerer-shards",
+  "version": 1,
+  "weekStart": ""
+}
