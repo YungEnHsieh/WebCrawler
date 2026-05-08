@@ -48,6 +48,21 @@ def load_split_subdomains(conn) -> set[str]:
         return {r[0] for r in cur.fetchall()}
 
 
+def load_pending_split_subdomains(conn) -> set[str]:
+    """Whitelist entries that have not yet been row-migrated."""
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT host FROM {SPLIT_TABLE} WHERE migrated_at IS NULL")
+        return {r[0] for r in cur.fetchall()}
+
+
+def mark_split_subdomain_migrated(conn, host: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            f"UPDATE {SPLIT_TABLE} SET migrated_at = NOW() WHERE host = %s",
+            (host,),
+        )
+
+
 def load_sharding_config(
     ingest_path: str | Path,
     conn,

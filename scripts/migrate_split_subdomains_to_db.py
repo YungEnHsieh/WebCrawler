@@ -41,7 +41,13 @@ SEED_HOSTS = [
     "shop.bbc.com",
 ]
 
-CREATE_SQL = f"CREATE TABLE IF NOT EXISTS {SPLIT_TABLE} (host VARCHAR PRIMARY KEY)"
+CREATE_SQL = f"""
+CREATE TABLE IF NOT EXISTS {SPLIT_TABLE} (
+    host VARCHAR PRIMARY KEY,
+    migrated_at TIMESTAMPTZ
+)
+"""
+ALTER_SQL = f"ALTER TABLE {SPLIT_TABLE} ADD COLUMN IF NOT EXISTS migrated_at TIMESTAMPTZ"
 
 
 def main():
@@ -52,6 +58,7 @@ def main():
 
     if args.dry_run:
         log.info("[DRY-RUN] %s", CREATE_SQL)
+        log.info("[DRY-RUN] %s", ALTER_SQL)
         for h in SEED_HOSTS:
             log.info("[DRY-RUN] INSERT %s", h)
         return
@@ -60,6 +67,7 @@ def main():
     try:
         with conn.cursor() as cur:
             cur.execute(CREATE_SQL)
+            cur.execute(ALTER_SQL)
             cur.executemany(
                 f"INSERT INTO {SPLIT_TABLE}(host) VALUES (%s) ON CONFLICT DO NOTHING",
                 [(h,) for h in SEED_HOSTS],
