@@ -1,7 +1,8 @@
 import json
+import os
 
 BOT_NAME = "crawler"
-LOG_LEVEL = "WARNING"
+LOG_LEVEL = os.getenv("CRAWLER_LOG_LEVEL", "WARNING")
 
 SPIDER_MODULES = ["crawler.spiders"]
 NEWSPIDER_MODULE = "crawler.spiders"
@@ -10,15 +11,52 @@ ROBOTSTXT_OBEY = True
 
 DUPEFILTER_CLASS = "scrapy.dupefilters.BaseDupeFilter" # Disable dupefilter
 
-with open("domain_qps.json") as f:
-    _DOMAIN_QPS = json.load(f)
-_DEFAULT_QPS = _DOMAIN_QPS.pop("_default", {})
 
-CONCURRENT_REQUESTS = 256
-CONCURRENT_REQUESTS_PER_DOMAIN = _DEFAULT_QPS.get("concurrency", 4)
-DOWNLOAD_DELAY = _DEFAULT_QPS.get("delay", 1.0)
-DOWNLOAD_SLOTS = _DOMAIN_QPS
-AUTOTHROTTLE_ENABLED = False
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+CONCURRENT_REQUESTS = int(os.getenv("CRAWLER_CONCURRENT_REQUESTS", "256"))
+USE_AUTOTHROTTLE = _env_bool("CRAWLER_USE_AUTOTHROTTLE", False)
+
+if USE_AUTOTHROTTLE:
+    CRAWLER_THROTTLE_MODE = "autothrottle"
+    CONCURRENT_REQUESTS_PER_DOMAIN = int(
+        os.getenv("CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN", "8")
+    )
+    DOWNLOAD_DELAY = float(os.getenv("CRAWLER_DOWNLOAD_DELAY", "0.25"))
+
+    AUTOTHROTTLE_ENABLED = True
+    AUTOTHROTTLE_START_DELAY = float(
+        os.getenv("CRAWLER_AUTOTHROTTLE_START_DELAY", "0.5")
+    )
+    AUTOTHROTTLE_MAX_DELAY = float(
+        os.getenv("CRAWLER_AUTOTHROTTLE_MAX_DELAY", "10.0")
+    )
+    AUTOTHROTTLE_TARGET_CONCURRENCY = float(
+        os.getenv("CRAWLER_AUTOTHROTTLE_TARGET_CONCURRENCY", "2.0")
+    )
+    AUTOTHROTTLE_DEBUG = _env_bool("CRAWLER_AUTOTHROTTLE_DEBUG", False)
+else:
+    CRAWLER_THROTTLE_MODE = "fixed"
+    with open("domain_qps.json") as f:
+        _DOMAIN_QPS = json.load(f)
+    _DEFAULT_QPS = _DOMAIN_QPS.pop("_default", {})
+
+    CONCURRENT_REQUESTS_PER_DOMAIN = int(
+        os.getenv(
+            "CRAWLER_CONCURRENT_REQUESTS_PER_DOMAIN",
+            str(_DEFAULT_QPS.get("concurrency", 4)),
+        )
+    )
+    DOWNLOAD_DELAY = float(
+        os.getenv("CRAWLER_DOWNLOAD_DELAY", str(_DEFAULT_QPS.get("delay", 1.0)))
+    )
+    DOWNLOAD_SLOTS = _DOMAIN_QPS
+    AUTOTHROTTLE_ENABLED = False
 
 # Keep a local request backlog so one slow domain does not block the next IPC batch.
 IPC_PREFETCH_LOW_WATERMARK_REQUESTS = CONCURRENT_REQUESTS * 2

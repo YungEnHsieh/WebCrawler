@@ -226,6 +226,29 @@ class HtmlSpider(scrapy.Spider):
             self._maybe_top_up(reason=f"{reason}_low_watermark")
 
     def spider_opened(self, spider=None):
+        settings = self.crawler.settings
+        logger.info(
+            "crawler.config",
+            extra={
+                "event": "crawler.config",
+                "throttle_mode": settings.get("CRAWLER_THROTTLE_MODE", "fixed"),
+                "autothrottle_enabled": settings.getbool("AUTOTHROTTLE_ENABLED"),
+                "concurrent_requests": settings.getint("CONCURRENT_REQUESTS"),
+                "concurrent_requests_per_domain": settings.getint(
+                    "CONCURRENT_REQUESTS_PER_DOMAIN"
+                ),
+                "download_delay": settings.getfloat("DOWNLOAD_DELAY"),
+                "autothrottle_target_concurrency": settings.getfloat(
+                    "AUTOTHROTTLE_TARGET_CONCURRENCY", 0.0
+                ),
+                "autothrottle_start_delay": settings.getfloat(
+                    "AUTOTHROTTLE_START_DELAY", 0.0
+                ),
+                "autothrottle_max_delay": settings.getfloat(
+                    "AUTOTHROTTLE_MAX_DELAY", 0.0
+                ),
+            },
+        )
         self._set_inflight_stats()
         if self.heartbeat_interval_sec > 0 and self._heartbeat_task is None:
             self._heartbeat_task = twisted_task.LoopingCall(self._emit_heartbeat)
