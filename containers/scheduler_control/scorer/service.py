@@ -38,8 +38,32 @@ class GoldenDiscoveryRankerService:
     def _table(shard_id: int) -> str:
         return f"url_state_current_{shard_id:03d}"
 
-    def _shard_ids(self) -> range:
-        return range(self.cfg.worker_id, self.cfg.total_shards, self.cfg.num_workers)
+    def _shard_ids(self) -> list[int]:
+        """Order in which this worker visits shards on each run_once.
+
+        Every worker visits every shard. Workers stagger their starting
+        offset by `total_shards // num_workers` so the four (or N) of
+        them don't all queue up on shard 0 first — but the static
+        partition is gone, so a worker that finishes its starting
+        section keeps walking and picks up shards that another worker
+        would previously have owned. URL-level FOR UPDATE SKIP LOCKED
+        inside `_score_batch` handles the resulting concurrent claims
+        on the same shard.
+
+        Replaces the prior static partition (worker N saw shards
+        [N, N + num_workers, ...]) which could not reassign work when
+        one worker drew a disproportionate share of the very large
+        (256M-row) shards while other workers sat idle after draining
+        their own assignment.
+        """
+        if self.cfg.num_workers <= 0:
+            return list(range(self.cfg.total_shards))
+        step = max(1, self.cfg.total_shards // self.cfg.num_workers)
+        offset = (self.cfg.worker_id * step) % self.cfg.total_shards
+        return [
+            (offset + i) % self.cfg.total_shards
+            for i in range(self.cfg.total_shards)
+        ]
 
     def _score_batch(self, shard_id: int) -> int:
         table = self._table(shard_id)
