@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -8,6 +10,10 @@ from psycopg2.extras import execute_values
 from sqlalchemy.orm import sessionmaker
 
 from libs.scoring.golden_discovery_runtime import GoldenDiscoveryRuntimeScorer
+
+
+LOGGER = logging.getLogger("ingestor")
+EXISTING_URL_LOOKUP_BATCH_SIZE = 50000
 
 
 @dataclass
@@ -120,9 +126,13 @@ class IngestDB:
         self,
         Session: sessionmaker,
         inline_ranker: GoldenDiscoveryRuntimeScorer | None = None,
+        inline_score_timeout_sec: float = 10.0,
+        inline_score_batch_size: int = 5000,
     ):
         self.Session = Session
         self.inline_ranker = inline_ranker
+        self.inline_score_timeout_sec = inline_score_timeout_sec
+        self.inline_score_batch_size = max(1, inline_score_batch_size)
 
     def _tcur(self, shard_id: int) -> str:
         return f"url_state_current_{shard_id:03d}"
@@ -133,17 +143,64 @@ class IngestDB:
     def _tevt(self, shard_id: int) -> str:
         return f"url_event_counter_{shard_id:03d}"
 
-    def _score_new_links(self, urls: list[str]) -> tuple[list[float], datetime | None]:
+    @staticmethod
+    def _chunks(items: list[str], size: int):
+        for offset in range(0, len(items), size):
+            yield items[offset:offset + size]
+
+    def _existing_urls(self, cur, table: str, urls: list[str]) -> set[str]:
         if not urls:
-            return [], None
+            return set()
+
+        existing: set[str] = set()
+        for chunk in self._chunks(urls, EXISTING_URL_LOOKUP_BATCH_SIZE):
+            cur.execute(f"SELECT url FROM {table} WHERE url = ANY(%s)", (chunk,))
+            existing.update(row[0] for row in cur.fetchall())
+        return existing
+
+    def _score_new_links(self, urls: list[str]) -> tuple[dict[str, float], datetime | None]:
+        if not urls:
+            return {}, None
         if self.inline_ranker is None:
-            return [0.0 for _ in urls], None
-        scores = [float(score) for score in self.inline_ranker.score_many(urls)]
-        if len(scores) != len(urls):
-            raise RuntimeError(
-                f"inline ranker returned {len(scores)} scores for {len(urls)} URLs"
+            return {}, None
+        if self.inline_score_timeout_sec <= 0:
+            LOGGER.warning(
+                "golden_discovery_ranker_v1.ingest_inline_timeout",
+                extra={
+                    "event": "golden_discovery_ranker_v1.ingest_inline_timeout",
+                    "pending_urls": len(urls),
+                    "scored_urls": 0,
+                    "timeout_sec": self.inline_score_timeout_sec,
+                },
             )
-        return scores, datetime.now(timezone.utc)
+            return {}, None
+
+        deadline = time.monotonic() + self.inline_score_timeout_sec
+        score_by_url: dict[str, float] = {}
+        scored_at = datetime.now(timezone.utc)
+        for chunk in self._chunks(urls, self.inline_score_batch_size):
+            if time.monotonic() >= deadline:
+                break
+
+            scores = [float(score) for score in self.inline_ranker.score_many(chunk)]
+            if len(scores) != len(chunk):
+                raise RuntimeError(
+                    f"inline ranker returned {len(scores)} scores for {len(chunk)} URLs"
+                )
+            score_by_url.update(zip(chunk, scores))
+
+        if len(score_by_url) < len(urls):
+            LOGGER.warning(
+                "golden_discovery_ranker_v1.ingest_inline_timeout",
+                extra={
+                    "event": "golden_discovery_ranker_v1.ingest_inline_timeout",
+                    "pending_urls": len(urls) - len(score_by_url),
+                    "scored_urls": len(score_by_url),
+                    "timeout_sec": self.inline_score_timeout_sec,
+                },
+            )
+
+        return score_by_url, scored_at if score_by_url else None
 
     @staticmethod
     def _parse_optional_datetime(value: str | None) -> datetime | None:
@@ -428,18 +485,28 @@ class IngestDB:
 
         unique_items = [(first_idx_by_url[url], rec) for url, rec in by_url.items()]
 
-        score_urls = [rec["url"] for _, rec in unique_items]
-        scores, score_updated_at = self._score_new_links(score_urls)
+        score_by_url: dict[str, float] = {}
+        score_updated_at = None
+        if self.inline_ranker is not None:
+            unique_urls = [rec["url"] for _, rec in unique_items]
+            if self.inline_score_timeout_sec > 0:
+                existing_urls = self._existing_urls(cur, tcur, unique_urls)
+                score_urls = [url for url in unique_urls if url not in existing_urls]
+            else:
+                score_urls = unique_urls
+            score_by_url, score_updated_at = self._score_new_links(score_urls)
 
         link_rows = []
-        for (_, rec), url_score in zip(unique_items, scores):
+        for _, rec in unique_items:
+            url = rec["url"]
+            scored = url in score_by_url
             link_rows.append(
                 (
-                    rec["url"],
+                    url,
                     int(rec["domain_id"]),
                     float(rec.get("domain_score", 0.0)),
-                    float(url_score),
-                    score_updated_at,
+                    float(score_by_url.get(url, 0.0)),
+                    score_updated_at if scored else None,
                     rec.get("discovered_from"),
                     int(rec.get("discovery_source_type", 0)),
                     rec.get("parent_page_score"),
