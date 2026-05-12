@@ -25,7 +25,6 @@ from libs.config.loader import load_yaml
 from libs.db.sharding.key import compute_shard, load_sharding_config
 
 REPO = Path(__file__).resolve().parents[1]
-SPLIT_CFG = REPO / "containers/scheduler_ingest/config/shard_split.yaml"
 INGEST_CFG = REPO / "containers/scheduler_ingest/config/ingest.yaml"
 
 
@@ -180,13 +179,13 @@ def main() -> None:
                    help="Actually move rows. Requires pipeline pause beforehand.")
     args = p.parse_args()
 
-    overrides, split_subdomains = load_sharding_config(INGEST_CFG, SPLIT_CFG)
-    num_shards = load_num_shards()
-    mode = "DRY-RUN" if args.dry_run else "EXECUTE"
-    print(f"mode: {mode}")
-    print(f"overrides: {overrides}")
-
     with psycopg2.connect(**CRAWLERDB) as conn:
+        overrides, split_subdomains = load_sharding_config(INGEST_CFG, conn)
+        num_shards = load_num_shards()
+        mode = "DRY-RUN" if args.dry_run else "EXECUTE"
+        print(f"mode: {mode}")
+        print(f"overrides: {overrides}")
+
         with conn.cursor() as cur:
             for domain in sorted(overrides):
                 target = compute_shard(domain, num_shards, overrides, split_subdomains)

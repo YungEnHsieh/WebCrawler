@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Move rows for non-whitelisted subdomains under the eTLD+1s implied by
-shard_split.yaml back to the parent eTLD+1's (shard, domain_id). Symmetric
+the shard_split_subdomain table back to the parent eTLD+1's
+(shard, domain_id). Symmetric
 inverse of migrate_shard_split.py: handles url_state_current / history /
 url_event_counter.
 
@@ -23,7 +24,6 @@ from libs.config.loader import load_yaml
 from libs.db.sharding.key import compute_shard, load_sharding_config
 
 REPO = Path(__file__).resolve().parents[1]
-SPLIT_CFG = REPO / "containers/scheduler_ingest/config/shard_split.yaml"
 INGEST_CFG = REPO / "containers/scheduler_ingest/config/ingest.yaml"
 
 
@@ -212,19 +212,19 @@ def main() -> None:
                    help="Actually move rows. Requires pipeline pause beforehand.")
     args = p.parse_args()
 
-    overrides, split_subdomains = load_sharding_config(INGEST_CFG, SPLIT_CFG)
-    parents = sorted(parents_of(split_subdomains))
-    if not parents:
-        print(f"no parents in {SPLIT_CFG}")
-        return
-
-    num_shards = load_num_shards()
-    mode = "DRY-RUN" if args.dry_run else "EXECUTE"
-    print(f"mode: {mode}")
-    print(f"split_subdomains: {sorted(split_subdomains)}")
-    print(f"parents: {parents}")
-
     with psycopg2.connect(**CRAWLERDB) as conn:
+        overrides, split_subdomains = load_sharding_config(INGEST_CFG, conn)
+        parents = sorted(parents_of(split_subdomains))
+        if not parents:
+            print("no parents in shard_split_subdomain")
+            return
+
+        num_shards = load_num_shards()
+        mode = "DRY-RUN" if args.dry_run else "EXECUTE"
+        print(f"mode: {mode}")
+        print(f"split_subdomains: {sorted(split_subdomains)}")
+        print(f"parents: {parents}")
+
         with conn.cursor() as cur:
             for parent in parents:
                 dst_shard = compute_shard(parent, num_shards, overrides, split_subdomains)

@@ -33,7 +33,6 @@ INGEST_CONFIG = (
     Path(__file__).resolve().parents[1]
     / "containers/scheduler_ingest/config/ingest.yaml"
 )
-SPLIT_CONFIG = INGEST_CONFIG.parent / "shard_split.yaml"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -245,9 +244,9 @@ def main():
                         "e.g. '%%.wikipedia.org' to limit scope")
     args = p.parse_args()
 
-    overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
     conn = psycopg2.connect(**CRAWLERDB)
     conn.autocommit = False
+    overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, conn)
     cur = conn.cursor()
 
     try:
