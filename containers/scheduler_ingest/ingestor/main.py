@@ -34,8 +34,22 @@ def _env_str(name: str, default: str) -> str:
     return value if value not in (None, "") else default
 
 
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    return float(value) if value not in (None, "") else default
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    return int(value) if value not in (None, "") else default
+
+
+def _ranker_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    return dict(raw.get("golden_discovery_ranker_v1") or {})
+
+
 def _load_inline_ranker(raw: dict[str, Any]) -> GoldenDiscoveryRuntimeScorer | None:
-    ranker_raw: dict[str, Any] = dict(raw.get("golden_discovery_ranker_v1") or {})
+    ranker_raw = _ranker_raw(raw)
     enabled = _env_bool(
         f"{RANKER_ENV_PREFIX}_INGEST_INLINE_ENABLED",
         bool(ranker_raw.get("ingest_inline_enabled", False)),
@@ -62,6 +76,25 @@ def _load_inline_ranker(raw: dict[str, Any]) -> GoldenDiscoveryRuntimeScorer | N
         },
     )
     return ranker
+
+
+def _inline_score_timeout_sec(raw: dict[str, Any]) -> float:
+    ranker_raw = _ranker_raw(raw)
+    return _env_float(
+        f"{RANKER_ENV_PREFIX}_INGEST_INLINE_SCORE_TIMEOUT_SEC",
+        float(ranker_raw.get("ingest_inline_score_timeout_sec", 10.0)),
+    )
+
+
+def _inline_score_batch_size(raw: dict[str, Any]) -> int:
+    ranker_raw = _ranker_raw(raw)
+    return max(
+        1,
+        _env_int(
+            f"{RANKER_ENV_PREFIX}_INGEST_INLINE_SCORE_BATCH_SIZE",
+            int(ranker_raw.get("ingest_inline_score_batch_size", 5000)),
+        ),
+    )
 
 
 def main():
@@ -102,7 +135,12 @@ def main():
     )
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-    db = IngestDB(Session, inline_ranker=_load_inline_ranker(raw))
+    db = IngestDB(
+        Session,
+        inline_ranker=_load_inline_ranker(raw),
+        inline_score_timeout_sec=_inline_score_timeout_sec(raw),
+        inline_score_batch_size=_inline_score_batch_size(raw),
+    )
     stats_dir=require(ingestor, "stats_dir")
     svc = IngestService(ingestor_id, db, StatsDeltaWriter(stats_dir))
 

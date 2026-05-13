@@ -112,7 +112,7 @@ Input: router output folders `ingestor_{id}`.
 Responsibilities:
 
 - `status="new"` records: insert new URL candidates into `url_state_current_{shard}` and history.
-  - If `GOLDEN_DISCOVERY_RANKER_V1_INGEST_INLINE_ENABLED=true`, score newly inserted URLs with the mounted ranker artifact before writing them to DB.
+  - If `GOLDEN_DISCOVERY_RANKER_V1_INGEST_INLINE_ENABLED=true`, check which URLs are truly new, score those with the mounted ranker artifact before writing them to DB, and fall back to unscored insert when the inline scoring time budget is exhausted.
   - If inline scoring is disabled, new URLs keep `url_score_updated_at=NULL` and the background ranker can score them later.
 - Fetch result records:
   - upsert `url_state_current_{shard}` counters and status fields,
