@@ -16,6 +16,9 @@ import tldextract
 from libs.config.loader import load_yaml
 
 
+SPLIT_TABLE = "shard_split_subdomain"
+
+
 def shard_key(name: str, split_subdomains: Iterable[str] | None = None) -> str:
     if not name:
         return "unknown"
@@ -38,20 +41,34 @@ def compute_shard(
     return int(h, 16) % num_shards
 
 
-def load_split_subdomains(path: str | Path) -> set[str]:
-    p = Path(path)
-    if not p.exists():
-        return set()
-    cfg = load_yaml(str(p))
-    return set(cfg.get("split_subdomains") or [])
+def load_split_subdomains(conn) -> set[str]:
+    """Read whitelist from DB. conn is a psycopg2 connection."""
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT host FROM {SPLIT_TABLE}")
+        return {r[0] for r in cur.fetchall()}
+
+
+def load_pending_split_subdomains(conn) -> set[str]:
+    """Whitelist entries that have not yet been row-migrated."""
+    with conn.cursor() as cur:
+        cur.execute(f"SELECT host FROM {SPLIT_TABLE} WHERE migrated_at IS NULL")
+        return {r[0] for r in cur.fetchall()}
+
+
+def mark_split_subdomain_migrated(conn, host: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            f"UPDATE {SPLIT_TABLE} SET migrated_at = NOW() WHERE host = %s",
+            (host,),
+        )
 
 
 def load_sharding_config(
     ingest_path: str | Path,
-    split_path: str | Path,
+    conn,
 ) -> tuple[dict[str, int], set[str]]:
-    """Returns (overrides, split_subdomains)."""
+    """Returns (overrides, split_subdomains). conn is a psycopg2 connection."""
     ingest = load_yaml(str(ingest_path)) if Path(ingest_path).exists() else {}
     overrides = dict((ingest.get("router") or {}).get("domain_overrides") or {})
-    split_subdomains = load_split_subdomains(split_path)
+    split_subdomains = load_split_subdomains(conn)
     return overrides, split_subdomains

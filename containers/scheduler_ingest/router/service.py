@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional, Set
 
 logger = logging.getLogger("router")
 
+import psycopg2
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError, InterfaceError
@@ -282,8 +283,9 @@ def load_router_config(path: str, router_id: int) -> RouterConfig:
     r = require(raw, "router")
     pg = require(raw, "postgres")
 
-    split_path = Path(path).parent / "shard_split.yaml"
-    overrides, split_subdomains = load_sharding_config(path, split_path)
+    dsn = str(require(pg, "dsn"))
+    with psycopg2.connect(dsn.replace("postgresql+psycopg2://", "postgresql://", 1)) as conn:
+        overrides, split_subdomains = load_sharding_config(path, conn)
 
     return RouterConfig(
         router_id=router_id,
@@ -297,5 +299,5 @@ def load_router_config(path: str, router_id: int) -> RouterConfig:
         shards_per_ingestor=int(require(r, "shards_per_ingestor")),
         domain_overrides=overrides,
         split_subdomains=split_subdomains,
-        postgres_dsn=str(require(pg, "dsn")),
+        postgres_dsn=dsn,
     )

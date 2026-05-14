@@ -25,7 +25,6 @@ INGEST_CONFIG = (
     Path(__file__).resolve().parents[1]
     / "containers/scheduler_ingest/config/ingest.yaml"
 )
-SPLIT_CONFIG = INGEST_CONFIG.parent / "shard_split.yaml"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -153,7 +152,7 @@ def main():
             log.info("Nothing to inject")
             return
 
-        overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, SPLIT_CONFIG)
+        overrides, split_subdomains = load_sharding_config(INGEST_CONFIG, crawler_conn)
         injected = 0
         marked = 0
         failed = 0
